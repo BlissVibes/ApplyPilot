@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 
 from applypilot.config import RESUME_PATH, TAILORED_DIR, load_profile
 from applypilot.database import get_connection, get_jobs_by_stage
-from applypilot.llm import get_client
+from applypilot.llm import get_client, get_haiku_client
 from applypilot.scoring.validator import (
     BANNED_WORDS,
     sanitize_text,
@@ -339,6 +339,101 @@ def judge_tailored_resume(
     }
 
 
+# ── Double Tap Double Check (Haiku Verification) ──────────────────────────
+
+def double_tap_check(tailored_text: str, job_title: str) -> tuple[str, dict]:
+    """Haiku verification pass: check for em dashes and fix if found.
+
+    Uses the lightweight Haiku model to verify the tailored resume for em dashes
+    and fix them if present. Logs all fixes made.
+
+    Args:
+        tailored_text: The tailored resume text from Gemini.
+        job_title: Target job title for logging context.
+
+    Returns:
+        (cleaned_text, fix_report) where fix_report contains verification details.
+    """
+    # Quick local check for em dashes
+    has_em_dash = "—" in tailored_text or "\u2014" in tailored_text
+    has_en_dash = "–" in tailored_text or "\u2013" in tailored_text
+
+    fix_report = {
+        "em_dashes_found": has_em_dash,
+        "en_dashes_found": has_en_dash,
+        "fixes_applied": [],
+        "haiku_response": "",
+    }
+
+    # If no dashes found, return as-is
+    if not (has_em_dash or has_en_dash):
+        log.info("[DOUBLE TAP] No dashes detected in %s", job_title[:40])
+        return tailored_text, fix_report
+
+    # Haiku: read and report on dashes
+    haiku = get_haiku_client()
+    check_messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a resume quality checker. Your job is to identify em dashes (—) "
+                "and en dashes (–) in the provided resume text and return ONLY a JSON object "
+                "with the locations and context of any dashes found.\n\n"
+                "Return ONLY valid JSON with this structure:\n"
+                '{"dashes_found": true/false, "locations": [{"line": "...", "context": "..."}]}'
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"Check this resume for em dashes or en dashes:\n\n{tailored_text}",
+        },
+    ]
+
+    try:
+        haiku_report = haiku.chat(check_messages, max_output_tokens=512)
+        fix_report["haiku_response"] = haiku_report
+        haiku_data = extract_json(haiku_report)
+
+        if haiku_data.get("dashes_found"):
+            locations = haiku_data.get("locations", [])
+            log.warning(
+                "[DOUBLE TAP] Found %d dash(es) in %s. Requesting Haiku fix.",
+                len(locations),
+                job_title[:40],
+            )
+
+            # Haiku: fix the dashes
+            fix_messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a resume editor. Remove ALL em dashes (—) and en dashes (–) "
+                        "from the provided resume and replace them with appropriate punctuation "
+                        "(use commas, periods, or hyphens). Return ONLY the corrected resume text, "
+                        "no explanations or JSON."
+                    ),
+                },
+                {"role": "user", "content": f"Fix all dashes in this resume:\n\n{tailored_text}"},
+            ]
+
+            fixed_text = haiku.chat(fix_messages, max_output_tokens=2048)
+            fix_report["fixes_applied"] = [
+                {"original": loc.get("context"), "fixed": True} for loc in locations
+            ]
+
+            log.info(
+                "[DOUBLE TAP] Fixed %d dash(es) in %s | Gemini → Haiku verification pass",
+                len(locations),
+                job_title[:40],
+            )
+            return fixed_text, fix_report
+    except Exception as e:
+        log.error("[DOUBLE TAP] Haiku verification failed: %s (returning original)", e)
+        return tailored_text, fix_report
+
+    return tailored_text, fix_report
+
+
 # ── Core Tailoring ───────────────────────────────────────────────────────
 
 def tailor_resume(
@@ -422,6 +517,10 @@ def tailor_resume(
 
         # Assemble text (header injected by code, em dashes auto-fixed)
         tailored = assemble_resume_text(data, profile)
+
+        # Double Tap Double Check: Haiku verification for em dashes
+        tailored, double_tap_report = double_tap_check(tailored, job.get("title", ""))
+        report["double_tap"] = double_tap_report
 
         # Layer 2: LLM judge (catches subtle fabrication) — skipped in lenient mode
         if validation_mode == "lenient":
