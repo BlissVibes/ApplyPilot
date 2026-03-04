@@ -400,6 +400,7 @@ textarea { min-height:100px; resize:vertical; }
         <!-- Locations -->
         <div class="card" style="margin-bottom:16px;padding:16px;">
           <h3 style="margin-bottom:8px;">Search Locations</h3>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Add locations with optional search radius (0 = remote-only)</p>
           <div id="locations-list"></div>
           <button class="btn btn-sm" onclick="addLocation()" style="margin-top:8px;">+ Add Location</button>
         </div>
@@ -441,8 +442,8 @@ textarea { min-height:100px; resize:vertical; }
               <input type="number" id="search-results-per-site" value="100" min="1" max="500" style="width:100%;">
             </div>
             <div class="form-group">
-              <label>Max job age (hours)</label>
-              <input type="number" id="search-hours-old" value="72" min="1" max="720" style="width:100%;">
+              <label>Max job age (days)</label>
+              <input type="number" id="search-days-old" value="3" min="1" max="30" style="width:100%;">
             </div>
           </div>
         </div>
@@ -471,14 +472,47 @@ textarea { min-height:100px; resize:vertical; }
           </div>
         </div>
 
-        <!-- Exclude Titles -->
+        <!-- Exclusions -->
         <div class="card" style="margin-bottom:16px;padding:16px;">
-          <h3 style="margin-bottom:8px;">Exclude Job Titles</h3>
-          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Skip jobs with these keywords in the title (case-insensitive)</p>
-          <div id="exclude-titles-list" class="tag-list"></div>
-          <div style="display:flex;gap:6px;margin-top:6px;">
-            <input type="text" id="exclude-title-input" placeholder="e.g. intern, VP, director" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addExcludeTitle()}">
-            <button class="btn btn-sm" onclick="addExcludeTitle()">Add</button>
+          <h3 style="margin-bottom:12px;">Job Exclusions</h3>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Skip jobs matching these criteria (case-insensitive)</p>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div>
+              <label style="font-size:12px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;display:block;">Job Title Keywords</label>
+              <div id="exclude-titles-list" class="tag-list"></div>
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <input type="text" id="exclude-title-input" placeholder="e.g. intern, VP, director" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addExclusion('title')}">
+                <button class="btn btn-sm" onclick="addExclusion('title')">Add</button>
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size:12px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;display:block;">Experience Keywords</label>
+              <div id="exclude-experience-list" class="tag-list"></div>
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <input type="text" id="exclude-experience-input" placeholder="e.g. 10+ years, manager" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addExclusion('experience')}">
+                <button class="btn btn-sm" onclick="addExclusion('experience')">Add</button>
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size:12px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;display:block;">Description Keywords</label>
+              <div id="exclude-description-list" class="tag-list"></div>
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <input type="text" id="exclude-description-input" placeholder="e.g. on-site only, clearance required" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addExclusion('description')}">
+                <button class="btn btn-sm" onclick="addExclusion('description')">Add</button>
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size:12px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;display:block;">Salary/Pay Requirements</label>
+              <div id="exclude-salary-list" class="tag-list"></div>
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <input type="text" id="exclude-salary-input" placeholder="e.g. $50k-$70k, unpaid" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addExclusion('salary')}">
+                <button class="btn btn-sm" onclick="addExclusion('salary')">Add</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1128,8 +1162,13 @@ async function loadSearches() {
   _searchData = data.data || {
     queries: [], locations: [], location: {accept_patterns: [], reject_patterns: []},
     country: 'USA', boards: ['indeed','linkedin','glassdoor','zip_recruiter','google'],
-    defaults: {results_per_site: 100, hours_old: 72}, exclude_titles: [],
+    defaults: {results_per_site: 100, hours_old: 72},
+    exclusions: {titles: [], experience: [], description: [], salary: []},
   };
+  // Convert hours_old to days if present
+  if (_searchData.defaults && _searchData.defaults.hours_old && !_searchData.defaults.days_old) {
+    _searchData.defaults.days_old = Math.ceil(_searchData.defaults.hours_old / 24);
+  }
   renderSearchForm();
 }
 
@@ -1162,7 +1201,8 @@ function renderSearchForm() {
   const ll = document.getElementById('locations-list');
   ll.innerHTML = _searchData.locations.map((loc, i) =>
     `<div class="search-row">
-      <input type="text" value="${esc(loc.location || '')}" onchange="_searchData.locations[${i}].location=this.value" placeholder="e.g. San Francisco, CA">
+      <input type="text" value="${esc(loc.location || '')}" onchange="_searchData.locations[${i}].location=this.value" placeholder="e.g. San Francisco, CA" style="flex:1.5;">
+      <input type="number" value="${loc.distance || 0}" onchange="_searchData.locations[${i}].distance=parseInt(this.value)||0" placeholder="Radius (miles)" min="0" max="100" style="width:110px;" title="Search radius in miles (0=remote-only)">
       <label style="display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:13px;cursor:pointer;">
         <input type="checkbox" ${loc.remote?'checked':''} onchange="_searchData.locations[${i}].remote=this.checked"> Remote
       </label>
@@ -1188,7 +1228,8 @@ function renderSearchForm() {
 
   // Defaults
   document.getElementById('search-results-per-site').value = (_searchData.defaults || {}).results_per_site || 100;
-  document.getElementById('search-hours-old').value = (_searchData.defaults || {}).hours_old || 72;
+  const daysOld = (_searchData.defaults || {}).days_old || Math.ceil(((_searchData.defaults || {}).hours_old || 72) / 24);
+  document.getElementById('search-days-old').value = daysOld;
 
   // Accept patterns
   renderTags('accept-patterns-list', (_searchData.location || {}).accept_patterns || [], 'accept');
@@ -1196,8 +1237,12 @@ function renderSearchForm() {
   // Reject patterns
   renderTags('reject-patterns-list', (_searchData.location || {}).reject_patterns || [], 'reject');
 
-  // Exclude titles
-  renderTags('exclude-titles-list', _searchData.exclude_titles || [], 'exclude');
+  // Exclusions
+  const excl = _searchData.exclusions || {titles: [], experience: [], description: [], salary: []};
+  renderTags('exclude-titles-list', excl.titles || [], 'title');
+  renderTags('exclude-experience-list', excl.experience || [], 'experience');
+  renderTags('exclude-description-list', excl.description || [], 'description');
+  renderTags('exclude-salary-list', excl.salary || [], 'salary');
 }
 
 function renderTags(containerId, items, type) {
@@ -1221,7 +1266,7 @@ function removeQuery(i) {
 }
 
 function addLocation() {
-  _searchData.locations.push({location: '', remote: false});
+  _searchData.locations.push({location: '', distance: 0, remote: false});
   renderSearchForm();
   const rows = document.querySelectorAll('#locations-list .search-row input[type="text"]');
   if (rows.length) rows[rows.length - 1].focus();
@@ -1242,12 +1287,15 @@ function addPattern(type) {
   renderSearchForm();
 }
 
-function addExcludeTitle() {
-  const input = document.getElementById('exclude-title-input');
+function addExclusion(type) {
+  const input = document.getElementById('exclude-' + type + '-input');
   const val = input.value.trim();
   if (!val) return;
-  if (!_searchData.exclude_titles) _searchData.exclude_titles = [];
-  _searchData.exclude_titles.push(val);
+  if (!_searchData.exclusions) _searchData.exclusions = {titles: [], experience: [], description: [], salary: []};
+
+  const typeKey = type === 'title' ? 'titles' : type;
+  if (!_searchData.exclusions[typeKey]) _searchData.exclusions[typeKey] = [];
+  _searchData.exclusions[typeKey].push(val);
   input.value = '';
   renderSearchForm();
 }
@@ -1255,7 +1303,12 @@ function addExcludeTitle() {
 function removeTag(type, i) {
   if (type === 'accept') _searchData.location.accept_patterns.splice(i, 1);
   else if (type === 'reject') _searchData.location.reject_patterns.splice(i, 1);
-  else if (type === 'exclude') _searchData.exclude_titles.splice(i, 1);
+  else if (type === 'title' || type === 'experience' || type === 'description' || type === 'salary') {
+    const typeKey = type === 'title' ? 'titles' : type;
+    if (_searchData.exclusions && _searchData.exclusions[typeKey]) {
+      _searchData.exclusions[typeKey].splice(i, 1);
+    }
+  }
   renderSearchForm();
 }
 
@@ -1267,9 +1320,11 @@ function collectFormData() {
 
   // Collect country and defaults
   _searchData.country = document.getElementById('search-country').value;
+  const daysOld = parseInt(document.getElementById('search-days-old').value) || 3;
   _searchData.defaults = {
     results_per_site: parseInt(document.getElementById('search-results-per-site').value) || 100,
-    hours_old: parseInt(document.getElementById('search-hours-old').value) || 72,
+    hours_old: daysOld * 24,  // Convert days to hours for backend
+    days_old: daysOld,
   };
   return _searchData;
 }

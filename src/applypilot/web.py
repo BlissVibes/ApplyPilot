@@ -327,7 +327,8 @@ def api_searches_get():
                 return jsonify({"exists": False, "data": {
                     "queries": [], "locations": [], "location": {"accept_patterns": [], "reject_patterns": []},
                     "country": "USA", "boards": ["indeed", "linkedin", "glassdoor", "zip_recruiter", "google"],
-                    "defaults": {"results_per_site": 100, "hours_old": 72}, "exclude_titles": [],
+                    "defaults": {"results_per_site": 100, "hours_old": 72, "days_old": 3},
+                    "exclusions": {"titles": [], "experience": [], "description": [], "salary": []},
                 }})
             return jsonify({"exists": False})
 
@@ -343,8 +344,25 @@ def api_searches_get():
             data["location"].setdefault("reject_patterns", [])
             data.setdefault("country", "USA")
             data.setdefault("boards", ["indeed", "linkedin", "glassdoor", "zip_recruiter", "google"])
-            data.setdefault("defaults", {"results_per_site": 100, "hours_old": 72})
-            data.setdefault("exclude_titles", [])
+
+            # Handle defaults: convert hours_old to days_old if needed
+            defaults = data.setdefault("defaults", {})
+            if "hours_old" in defaults and "days_old" not in defaults:
+                defaults["days_old"] = max(1, defaults["hours_old"] // 24)
+            defaults.setdefault("results_per_site", 100)
+            defaults.setdefault("hours_old", defaults.get("days_old", 3) * 24)
+
+            # Handle old exclude_titles field -> new exclusions format
+            if "exclude_titles" in data and "exclusions" not in data:
+                data["exclusions"] = {
+                    "titles": data.pop("exclude_titles", []),
+                    "experience": [],
+                    "description": [],
+                    "salary": [],
+                }
+            else:
+                data.setdefault("exclusions", {"titles": [], "experience": [], "description": [], "salary": []})
+
             return jsonify({"exists": True, "data": data})
         return jsonify({"exists": True, "content": content})
     except Exception as e:
