@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ApplyPilot</title>
+<style>
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #242836;
+  --border: #2e3345;
+  --text: #e4e6ef;
+  --text-dim: #8b8fa3;
+  --accent: #6c8aff;
+  --accent-hover: #5a7af0;
+  --green: #4ade80;
+  --yellow: #facc15;
+  --red: #f87171;
+  --orange: #fb923c;
+  --radius: 8px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background:var(--bg); color:var(--text); display:flex; min-height:100vh; }
+a { color:var(--accent); text-decoration:none; }
+a:hover { text-decoration:underline; }
+
+/* Sidebar */
+.sidebar { width:220px; background:var(--surface); border-right:1px solid var(--border); padding:16px 0; display:flex; flex-direction:column; position:fixed; top:0; left:0; bottom:0; z-index:10; }
+.sidebar .logo { padding:8px 20px 24px; font-size:18px; font-weight:700; color:var(--accent); letter-spacing:-0.5px; }
+.sidebar .logo span { color:var(--text-dim); font-weight:400; font-size:12px; display:block; margin-top:2px; }
+.sidebar nav a { display:flex; align-items:center; gap:10px; padding:10px 20px; color:var(--text-dim); font-size:14px; transition:all .15s; border-left:3px solid transparent; }
+.sidebar nav a:hover { background:var(--surface2); color:var(--text); text-decoration:none; }
+.sidebar nav a.active { color:var(--accent); border-left-color:var(--accent); background:rgba(108,138,255,.08); }
+.sidebar nav a svg { width:18px; height:18px; flex-shrink:0; }
+
+/* Main */
+.main { margin-left:220px; flex:1; padding:24px 32px; max-width:1200px; }
+.page { display:none; }
+.page.active { display:block; }
+h1 { font-size:24px; margin-bottom:20px; font-weight:600; }
+h2 { font-size:18px; margin:20px 0 12px; font-weight:600; }
+h3 { font-size:15px; margin:16px 0 8px; font-weight:600; color:var(--text-dim); }
+
+/* Cards */
+.cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; margin-bottom:24px; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; }
+.card .label { font-size:12px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+.card .value { font-size:28px; font-weight:700; }
+.card .value.green { color:var(--green); }
+.card .value.yellow { color:var(--yellow); }
+.card .value.red { color:var(--red); }
+.card .value.accent { color:var(--accent); }
+
+/* Tables */
+table { width:100%; border-collapse:collapse; background:var(--surface); border-radius:var(--radius); overflow:hidden; }
+th, td { text-align:left; padding:10px 14px; font-size:13px; border-bottom:1px solid var(--border); }
+th { background:var(--surface2); color:var(--text-dim); font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.5px; position:sticky; top:0; }
+tr:hover td { background:rgba(108,138,255,.04); }
+.table-wrap { max-height:60vh; overflow-y:auto; border-radius:var(--radius); border:1px solid var(--border); }
+
+/* Buttons */
+.btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:6px; border:none; cursor:pointer; font-size:13px; font-weight:500; transition:all .15s; }
+.btn-primary { background:var(--accent); color:#fff; }
+.btn-primary:hover { background:var(--accent-hover); }
+.btn-primary:disabled { opacity:.5; cursor:not-allowed; }
+.btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+.btn-secondary:hover { background:var(--border); }
+.btn-danger { background:var(--red); color:#fff; }
+.btn-sm { padding:5px 10px; font-size:12px; }
+
+/* Forms */
+.form-group { margin-bottom:14px; }
+.form-group label { display:block; font-size:12px; color:var(--text-dim); margin-bottom:4px; font-weight:500; text-transform:uppercase; letter-spacing:.3px; }
+input[type="text"], input[type="number"], input[type="password"], input[type="email"],
+textarea, select {
+  width:100%; padding:8px 12px; background:var(--surface2); border:1px solid var(--border);
+  border-radius:6px; color:var(--text); font-size:13px; font-family:inherit;
+}
+input:focus, textarea:focus, select:focus { outline:none; border-color:var(--accent); }
+textarea { min-height:100px; resize:vertical; }
+
+/* Upload area */
+.upload-area { border:2px dashed var(--border); border-radius:var(--radius); padding:32px; text-align:center; cursor:pointer; transition:all .2s; background:var(--surface); }
+.upload-area:hover, .upload-area.dragover { border-color:var(--accent); background:rgba(108,138,255,.05); }
+.upload-area input[type="file"] { display:none; }
+.upload-area p { color:var(--text-dim); font-size:14px; margin-top:8px; }
+
+/* Score badge */
+.score { display:inline-block; padding:2px 8px; border-radius:4px; font-size:12px; font-weight:700; min-width:28px; text-align:center; }
+.score-high { background:rgba(74,222,128,.15); color:var(--green); }
+.score-mid { background:rgba(250,204,21,.15); color:var(--yellow); }
+.score-low { background:rgba(248,113,113,.15); color:var(--red); }
+
+/* Status badge */
+.badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+.badge-ok { background:rgba(74,222,128,.15); color:var(--green); }
+.badge-warn { background:rgba(250,204,21,.15); color:var(--yellow); }
+.badge-err { background:rgba(248,113,113,.15); color:var(--red); }
+.badge-info { background:rgba(108,138,255,.15); color:var(--accent); }
+
+/* Pipeline progress */
+.pipeline-stages { display:flex; gap:8px; margin:16px 0; flex-wrap:wrap; }
+.stage-chip { padding:8px 16px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; font-size:13px; display:flex; align-items:center; gap:6px; }
+.stage-chip.running { border-color:var(--accent); background:rgba(108,138,255,.1); }
+.stage-chip.done { border-color:var(--green); }
+.stage-chip.error { border-color:var(--red); }
+
+/* Tabs */
+.tabs { display:flex; gap:0; margin-bottom:16px; border-bottom:1px solid var(--border); }
+.tab { padding:10px 18px; font-size:13px; cursor:pointer; color:var(--text-dim); border-bottom:2px solid transparent; transition:all .15s; }
+.tab:hover { color:var(--text); }
+.tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+/* Toolbar */
+.toolbar { display:flex; gap:8px; align-items:center; margin-bottom:16px; flex-wrap:wrap; }
+.toolbar input[type="text"] { width:280px; }
+.toolbar select { width:auto; }
+
+/* Toast */
+.toast { position:fixed; bottom:24px; right:24px; padding:12px 20px; border-radius:8px; font-size:13px; z-index:999; animation:slideIn .3s; }
+.toast-ok { background:var(--green); color:#000; }
+.toast-err { background:var(--red); color:#fff; }
+@keyframes slideIn { from { transform:translateY(20px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+
+/* Score bar chart */
+.score-bar { display:flex; align-items:end; gap:4px; height:80px; margin:12px 0; }
+.score-bar .bar-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; }
+.score-bar .bar { min-width:24px; border-radius:3px 3px 0 0; transition:height .3s; }
+.score-bar .bar-label { font-size:10px; color:var(--text-dim); }
+.score-bar .bar-count { font-size:10px; color:var(--text-dim); }
+
+/* Profile grid */
+.profile-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px 20px; }
+@media (max-width:800px) { .profile-grid { grid-template-columns:1fr; } }
+
+/* Checkbox */
+.checkbox-group { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; }
+.checkbox-group label { display:flex; align-items:center; gap:6px; padding:6px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:13px; }
+.checkbox-group label:hover { border-color:var(--accent); }
+.checkbox-group input:checked + span { color:var(--accent); }
+
+/* Modal */
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:100; justify-content:center; align-items:center; }
+.modal-overlay.show { display:flex; }
+.modal { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; width:90%; max-width:700px; max-height:80vh; overflow-y:auto; }
+.modal h2 { margin-top:0; }
+.modal pre { background:var(--surface2); padding:12px; border-radius:6px; font-size:12px; overflow-x:auto; white-space:pre-wrap; word-break:break-word; max-height:400px; overflow-y:auto; }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="logo">ApplyPilot<span>Job Application Pipeline</span></div>
+  <nav>
+    <a href="#dashboard" class="active" onclick="showPage('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboard
+    </a>
+    <a href="#setup" onclick="showPage('setup')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+      Setup
+    </a>
+    <a href="#jobs" onclick="showPage('jobs')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+      Jobs
+    </a>
+    <a href="#pipeline" onclick="showPage('pipeline')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Pipeline
+    </a>
+    <a href="#files" onclick="showPage('files')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Files
+    </a>
+    <a href="#settings" onclick="showPage('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      Settings
+    </a>
+  </nav>
+</div>
+
+<!-- Main Content -->
+<div class="main">
+
+  <!-- Dashboard Page -->
+  <div id="page-dashboard" class="page active">
+    <h1>Dashboard</h1>
+    <div id="stats-cards" class="cards"></div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:300px;">
+        <h2>Score Distribution</h2>
+        <div id="score-chart" class="score-bar"></div>
+      </div>
+      <div style="flex:1;min-width:300px;">
+        <h2>Sources</h2>
+        <div id="sites-table"></div>
+      </div>
+    </div>
+    <h2>Top Jobs (Score 7+)</h2>
+    <div id="top-jobs" class="table-wrap"></div>
+  </div>
+
+  <!-- Setup Page -->
+  <div id="page-setup" class="page">
+    <h1>Setup</h1>
+
+    <div class="tabs">
+      <div class="tab active" onclick="showSetupTab('resume')">Resume Upload</div>
+      <div class="tab" onclick="showSetupTab('apikeys')">API Keys</div>
+      <div class="tab" onclick="showSetupTab('profile')">Profile</div>
+      <div class="tab" onclick="showSetupTab('doctor')">Doctor</div>
+    </div>
+
+    <!-- Resume Upload -->
+    <div id="setup-resume" class="setup-tab">
+      <h2>Upload Your Resume</h2>
+      <p style="color:var(--text-dim);margin-bottom:16px;">Upload a .txt or .pdf resume file. PDF files will have text automatically extracted.</p>
+      <div class="upload-area" id="upload-area" onclick="document.getElementById('resume-file').click()">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <p>Drop your resume here or click to browse</p>
+        <p style="font-size:12px;">.txt or .pdf files accepted</p>
+        <input type="file" id="resume-file" accept=".txt,.pdf" onchange="uploadResume(this)">
+      </div>
+      <div id="resume-status" style="margin-top:12px;"></div>
+      <div id="current-resume" style="margin-top:16px;"></div>
+    </div>
+
+    <!-- API Keys -->
+    <div id="setup-apikeys" class="setup-tab" style="display:none;">
+      <h2>API Key Configuration</h2>
+      <p style="color:var(--text-dim);margin-bottom:16px;">Configure your LLM provider. At least one API key is required for AI features.</p>
+      <div style="max-width:500px;">
+        <div class="form-group">
+          <label>Gemini API Key (Free tier available)</label>
+          <input type="password" id="env-GEMINI_API_KEY" placeholder="AIza...">
+        </div>
+        <div class="form-group">
+          <label>OpenAI API Key</label>
+          <input type="password" id="env-OPENAI_API_KEY" placeholder="sk-...">
+        </div>
+        <div class="form-group">
+          <label>Anthropic API Key</label>
+          <input type="password" id="env-ANTHROPIC_API_KEY" placeholder="sk-ant-...">
+        </div>
+        <div class="form-group">
+          <label>LLM Model Override (optional)</label>
+          <input type="text" id="env-LLM_MODEL" placeholder="e.g. gemini/gemini-3.0-flash">
+        </div>
+        <div class="form-group">
+          <label>Local LLM URL (optional)</label>
+          <input type="text" id="env-LLM_URL" placeholder="http://localhost:11434/v1">
+        </div>
+        <div class="form-group">
+          <label>CapSolver API Key (optional, for CAPTCHAs)</label>
+          <input type="password" id="env-CAPSOLVER_API_KEY" placeholder="">
+        </div>
+        <button class="btn btn-primary" onclick="saveEnv()">Save API Keys</button>
+      </div>
+    </div>
+
+    <!-- Profile -->
+    <div id="setup-profile" class="setup-tab" style="display:none;">
+      <h2>Profile</h2>
+      <p style="color:var(--text-dim);margin-bottom:8px;">Your profile drives resume tailoring and auto-fill. Upload a resume first, then parse it to auto-fill.</p>
+      <div style="margin-bottom:16px;">
+        <button class="btn btn-secondary" onclick="parseResume()">Auto-Fill from Resume (LLM)</button>
+        <button class="btn btn-secondary" onclick="loadProfile()" style="margin-left:8px;">Reload</button>
+      </div>
+      <div id="profile-form"></div>
+      <button class="btn btn-primary" onclick="saveProfile()" style="margin-top:12px;">Save Profile</button>
+    </div>
+
+    <!-- Doctor -->
+    <div id="setup-doctor" class="setup-tab" style="display:none;">
+      <h2>System Check</h2>
+      <div id="doctor-results"></div>
+    </div>
+  </div>
+
+  <!-- Jobs Page -->
+  <div id="page-jobs" class="page">
+    <h1>Jobs</h1>
+    <div class="toolbar">
+      <input type="text" id="job-search" placeholder="Search jobs..." oninput="debounceLoadJobs()">
+      <select id="job-stage" onchange="loadJobs()">
+        <option value="discovered">All Discovered</option>
+        <option value="enriched">Enriched</option>
+        <option value="scored" selected>Scored</option>
+        <option value="tailored">Tailored</option>
+        <option value="applied">Applied</option>
+      </select>
+      <select id="job-min-score" onchange="loadJobs()">
+        <option value="">Any Score</option>
+        <option value="9">9+</option>
+        <option value="8">8+</option>
+        <option value="7" selected>7+</option>
+        <option value="5">5+</option>
+        <option value="1">1+</option>
+      </select>
+      <button class="btn btn-secondary btn-sm" onclick="loadJobs()">Refresh</button>
+    </div>
+    <div id="jobs-count" style="font-size:12px;color:var(--text-dim);margin-bottom:8px;"></div>
+    <div id="jobs-table" class="table-wrap"></div>
+  </div>
+
+  <!-- Pipeline Page -->
+  <div id="page-pipeline" class="page">
+    <h1>Pipeline</h1>
+    <div class="card" style="margin-bottom:20px;">
+      <h3 style="margin-top:0;">Run Pipeline Stages</h3>
+      <div class="checkbox-group" id="pipeline-stages">
+        <label><input type="checkbox" value="discover" checked><span>Discover</span></label>
+        <label><input type="checkbox" value="enrich" checked><span>Enrich</span></label>
+        <label><input type="checkbox" value="score" checked><span>Score</span></label>
+        <label><input type="checkbox" value="tailor" checked><span>Tailor</span></label>
+        <label><input type="checkbox" value="cover" checked><span>Cover Letters</span></label>
+        <label><input type="checkbox" value="pdf" checked><span>PDF</span></label>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap;">
+        <div class="form-group" style="margin:0;width:120px;">
+          <label>Min Score</label>
+          <input type="number" id="pipeline-min-score" value="7" min="1" max="10">
+        </div>
+        <div class="form-group" style="margin:0;width:100px;">
+          <label>Workers</label>
+          <input type="number" id="pipeline-workers" value="1" min="1" max="8">
+        </div>
+        <div class="form-group" style="margin:0;width:130px;">
+          <label>Validation</label>
+          <select id="pipeline-validation">
+            <option value="lenient">Lenient</option>
+            <option value="normal" selected>Normal</option>
+            <option value="strict">Strict</option>
+          </select>
+        </div>
+        <div style="margin-top:18px;">
+          <button class="btn btn-primary" id="run-pipeline-btn" onclick="runPipeline()">Run Pipeline</button>
+        </div>
+      </div>
+    </div>
+    <div id="pipeline-status"></div>
+    <div id="pipeline-results"></div>
+  </div>
+
+  <!-- Files Page -->
+  <div id="page-files" class="page">
+    <h1>Generated Files</h1>
+    <div class="tabs">
+      <div class="tab active" onclick="showFilesTab('resumes')">Tailored Resumes</div>
+      <div class="tab" onclick="showFilesTab('covers')">Cover Letters</div>
+    </div>
+    <div id="files-resumes" class="files-tab"></div>
+    <div id="files-covers" class="files-tab" style="display:none;"></div>
+  </div>
+
+  <!-- Settings Page -->
+  <div id="page-settings" class="page">
+    <h1>Settings</h1>
+    <div class="tabs">
+      <div class="tab active" onclick="showSettingsTab('searches')">Search Config</div>
+      <div class="tab" onclick="showSettingsTab('env')">Environment</div>
+    </div>
+    <div id="settings-searches" class="settings-tab">
+      <h2>Search Configuration (searches.yaml)</h2>
+      <p style="color:var(--text-dim);margin-bottom:12px;">Define your job search queries, locations, and filters.</p>
+      <textarea id="searches-editor" style="min-height:300px;font-family:monospace;font-size:12px;"></textarea>
+      <button class="btn btn-primary" onclick="saveSearches()" style="margin-top:8px;">Save</button>
+    </div>
+    <div id="settings-env" class="settings-tab" style="display:none;">
+      <h2>Environment Variables</h2>
+      <div id="env-display"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- File View Modal -->
+<div class="modal-overlay" id="file-modal">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2 id="file-modal-title">File</h2>
+      <button class="btn btn-secondary btn-sm" onclick="closeModal()">Close</button>
+    </div>
+    <pre id="file-modal-content"></pre>
+  </div>
+</div>
+
+<!-- Job Detail Modal -->
+<div class="modal-overlay" id="job-modal">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2 id="job-modal-title">Job Details</h2>
+      <button class="btn btn-secondary btn-sm" onclick="closeJobModal()">Close</button>
+    </div>
+    <div id="job-modal-content"></div>
+  </div>
+</div>
+
+<script>
+// ── Navigation ──────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sidebar nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelector(`a[href="#${name}"]`).classList.add('active');
+
+  if (name === 'dashboard') loadDashboard();
+  if (name === 'jobs') loadJobs();
+  if (name === 'setup') { loadResumeStatus(); loadEnvDisplay(); loadProfile(); }
+  if (name === 'pipeline') pollPipelineStatus();
+  if (name === 'files') loadFiles();
+  if (name === 'settings') loadSearches();
+}
+
+function showSetupTab(name) {
+  document.querySelectorAll('#page-setup .setup-tab').forEach(t => t.style.display = 'none');
+  document.getElementById('setup-' + name).style.display = 'block';
+  document.querySelectorAll('#page-setup .tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  if (name === 'doctor') loadDoctor();
+  if (name === 'apikeys') loadEnvKeys();
+  if (name === 'profile') loadProfile();
+}
+
+function showFilesTab(name) {
+  document.querySelectorAll('#page-files .files-tab').forEach(t => t.style.display = 'none');
+  document.getElementById('files-' + name).style.display = 'block';
+  document.querySelectorAll('#page-files .tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+function showSettingsTab(name) {
+  document.querySelectorAll('#page-settings .settings-tab').forEach(t => t.style.display = 'none');
+  document.getElementById('settings-' + name).style.display = 'block';
+  document.querySelectorAll('#page-settings .tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  if (name === 'env') loadEnvDisplay();
+}
+
+// ── Toast ───────────────────────────────────────────────────────────
+function toast(msg, type='ok') {
+  const t = document.createElement('div');
+  t.className = 'toast toast-' + type;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+// ── API helpers ─────────────────────────────────────────────────────
+async function api(url, opts) {
+  try {
+    const r = await fetch(url, opts);
+    return await r.json();
+  } catch(e) {
+    console.error('API error:', e);
+    return { error: e.message };
+  }
+}
+
+// ── Dashboard ───────────────────────────────────────────────────────
+async function loadDashboard() {
+  const stats = await api('/api/stats');
+  if (stats.error) return;
+
+  // Cards
+  const cards = document.getElementById('stats-cards');
+  cards.innerHTML = `
+    <div class="card"><div class="label">Total Jobs</div><div class="value accent">${stats.total}</div></div>
+    <div class="card"><div class="label">Enriched</div><div class="value">${stats.with_description}</div></div>
+    <div class="card"><div class="label">Scored</div><div class="value">${stats.scored}</div></div>
+    <div class="card"><div class="label">Tailored</div><div class="value green">${stats.tailored}</div></div>
+    <div class="card"><div class="label">Cover Letters</div><div class="value">${stats.with_cover_letter}</div></div>
+    <div class="card"><div class="label">Ready to Apply</div><div class="value yellow">${stats.ready_to_apply}</div></div>
+    <div class="card"><div class="label">Applied</div><div class="value green">${stats.applied}</div></div>
+    <div class="card"><div class="label">Errors</div><div class="value red">${stats.apply_errors}</div></div>
+  `;
+
+  // Score chart
+  const chart = document.getElementById('score-chart');
+  if (stats.score_distribution && stats.score_distribution.length) {
+    const maxCount = Math.max(...stats.score_distribution.map(d => d[1]));
+    chart.innerHTML = stats.score_distribution.map(([score, count]) => {
+      const h = maxCount > 0 ? Math.max(4, (count / maxCount) * 70) : 4;
+      const color = score >= 7 ? 'var(--green)' : score >= 5 ? 'var(--yellow)' : 'var(--red)';
+      return `<div class="bar-col">
+        <div class="bar-count">${count}</div>
+        <div class="bar" style="height:${h}px;background:${color};width:100%;"></div>
+        <div class="bar-label">${score}</div>
+      </div>`;
+    }).join('');
+  } else {
+    chart.innerHTML = '<p style="color:var(--text-dim);font-size:13px;">No scored jobs yet</p>';
+  }
+
+  // Sites
+  const sites = document.getElementById('sites-table');
+  if (stats.by_site && stats.by_site.length) {
+    sites.innerHTML = '<table>' +
+      stats.by_site.slice(0, 10).map(([site, count]) =>
+        `<tr><td>${site || 'Unknown'}</td><td style="text-align:right">${count}</td></tr>`
+      ).join('') + '</table>';
+  } else {
+    sites.innerHTML = '<p style="color:var(--text-dim);font-size:13px;">No jobs discovered yet</p>';
+  }
+
+  // Top jobs
+  const jobs = await api('/api/jobs?stage=scored&min_score=7&limit=20');
+  const topDiv = document.getElementById('top-jobs');
+  if (Array.isArray(jobs) && jobs.length) {
+    topDiv.innerHTML = renderJobsTable(jobs);
+  } else {
+    topDiv.innerHTML = '<p style="color:var(--text-dim);padding:16px;font-size:13px;">No high-scoring jobs yet. Run the pipeline to discover and score jobs.</p>';
+  }
+}
+
+// ── Jobs ────────────────────────────────────────────────────────────
+let jobsDebounce;
+function debounceLoadJobs() {
+  clearTimeout(jobsDebounce);
+  jobsDebounce = setTimeout(loadJobs, 300);
+}
+
+async function loadJobs() {
+  const stage = document.getElementById('job-stage').value;
+  const minScore = document.getElementById('job-min-score').value;
+  const search = document.getElementById('job-search').value;
+
+  let url = `/api/jobs?stage=${stage}&limit=200`;
+  if (minScore) url += `&min_score=${minScore}`;
+  if (search) url += `&search=${encodeURIComponent(search)}`;
+
+  const jobs = await api(url);
+  const countDiv = document.getElementById('jobs-count');
+  const tableDiv = document.getElementById('jobs-table');
+
+  if (Array.isArray(jobs)) {
+    countDiv.textContent = `${jobs.length} job(s)`;
+    tableDiv.innerHTML = jobs.length ? renderJobsTable(jobs) : '<p style="padding:16px;color:var(--text-dim)">No jobs match filters</p>';
+  } else {
+    countDiv.textContent = '';
+    tableDiv.innerHTML = '<p style="padding:16px;color:var(--red)">Error loading jobs</p>';
+  }
+}
+
+function renderJobsTable(jobs) {
+  return '<table><thead><tr>' +
+    '<th>Score</th><th>Title</th><th>Location</th><th>Site</th><th>Status</th><th></th>' +
+    '</tr></thead><tbody>' +
+    jobs.map(j => {
+      const score = j.fit_score;
+      const cls = score >= 7 ? 'score-high' : score >= 5 ? 'score-mid' : 'score-low';
+      const status = j.applied_at ? '<span class="badge badge-ok">Applied</span>' :
+                     j.tailored_resume_path ? '<span class="badge badge-info">Tailored</span>' :
+                     j.fit_score ? '<span class="badge badge-warn">Scored</span>' :
+                     '<span class="badge" style="opacity:.5">Discovered</span>';
+      return `<tr>
+        <td>${score != null ? `<span class="score ${cls}">${score}</span>` : '-'}</td>
+        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(j.title)}">${esc(j.title || '(no title)')}</td>
+        <td>${esc(j.location || '-')}</td>
+        <td>${esc(j.site || '-')}</td>
+        <td>${status}</td>
+        <td><button class="btn btn-secondary btn-sm" onclick="showJobDetail('${esc(j.url)}')">View</button></td>
+      </tr>`;
+    }).join('') +
+    '</tbody></table>';
+}
+
+function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+async function showJobDetail(url) {
+  const job = await api('/api/job/' + encodeURIComponent(url));
+  if (job.error) { toast(job.error, 'err'); return; }
+
+  document.getElementById('job-modal-title').textContent = job.title || '(untitled)';
+  const c = document.getElementById('job-modal-content');
+
+  const scoreHtml = job.fit_score != null ?
+    `<span class="score ${job.fit_score >= 7 ? 'score-high' : job.fit_score >= 5 ? 'score-mid' : 'score-low'}">${job.fit_score}/10</span>` : 'Not scored';
+
+  c.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;margin-bottom:16px;">
+      <div><strong>Score:</strong> ${scoreHtml}</div>
+      <div><strong>Site:</strong> ${esc(job.site || '-')}</div>
+      <div><strong>Location:</strong> ${esc(job.location || '-')}</div>
+      <div><strong>Salary:</strong> ${esc(job.salary || '-')}</div>
+    </div>
+    <div style="margin-bottom:8px;"><strong>URL:</strong> <a href="${esc(job.url)}" target="_blank" rel="noopener">${esc(job.url)}</a></div>
+    ${job.application_url ? `<div style="margin-bottom:8px;"><strong>Apply URL:</strong> <a href="${esc(job.application_url)}" target="_blank" rel="noopener">${esc(job.application_url)}</a></div>` : ''}
+    ${job.score_reasoning ? `<div style="margin-bottom:8px;"><strong>Score Reasoning:</strong> ${esc(job.score_reasoning)}</div>` : ''}
+    ${job.tailored_resume_path ? `<div style="margin-bottom:8px;"><strong>Tailored Resume:</strong> <button class="btn btn-secondary btn-sm" onclick="viewFile('${esc(job.tailored_resume_path)}')">View</button></div>` : ''}
+    ${job.cover_letter_path ? `<div style="margin-bottom:8px;"><strong>Cover Letter:</strong> <button class="btn btn-secondary btn-sm" onclick="viewFile('${esc(job.cover_letter_path)}')">View</button></div>` : ''}
+    ${job.apply_status ? `<div style="margin-bottom:8px;"><strong>Apply Status:</strong> ${esc(job.apply_status)}</div>` : ''}
+    ${job.apply_error ? `<div style="margin-bottom:8px;color:var(--red);"><strong>Apply Error:</strong> ${esc(job.apply_error)}</div>` : ''}
+    <h3>Description</h3>
+    <pre style="white-space:pre-wrap;font-size:12px;max-height:300px;overflow-y:auto;background:var(--surface2);padding:12px;border-radius:6px;">${esc(job.full_description || job.description || 'No description available')}</pre>
+  `;
+
+  document.getElementById('job-modal').classList.add('show');
+}
+
+function closeJobModal() { document.getElementById('job-modal').classList.remove('show'); }
+
+// ── Resume Upload ───────────────────────────────────────────────────
+const uploadArea = document.getElementById('upload-area');
+if (uploadArea) {
+  uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+  uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+  uploadArea.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    if (e.dataTransfer.files.length) {
+      document.getElementById('resume-file').files = e.dataTransfer.files;
+      uploadResume(document.getElementById('resume-file'));
+    }
+  });
+}
+
+async function uploadResume(input) {
+  if (!input.files.length) return;
+  const file = input.files[0];
+  const form = new FormData();
+  form.append('file', file);
+
+  const status = document.getElementById('resume-status');
+  status.innerHTML = '<span style="color:var(--accent)">Uploading...</span>';
+
+  const r = await fetch('/api/resume/upload', { method: 'POST', body: form });
+  const data = await r.json();
+
+  if (data.error) {
+    status.innerHTML = `<span style="color:var(--red)">${esc(data.error)}</span>`;
+    toast(data.error, 'err');
+  } else {
+    status.innerHTML = `<span style="color:var(--green)">Uploaded: ${esc(data.filename)} (${data.type})</span>`;
+    toast('Resume uploaded!');
+    loadResumeStatus();
+  }
+}
+
+async function loadResumeStatus() {
+  const data = await api('/api/resume');
+  const div = document.getElementById('current-resume');
+  if (data.exists) {
+    const preview = data.text.substring(0, 500);
+    div.innerHTML = `
+      <h3>Current Resume</h3>
+      <pre style="background:var(--surface2);padding:12px;border-radius:6px;font-size:12px;max-height:200px;overflow-y:auto;white-space:pre-wrap;">${esc(preview)}${data.text.length > 500 ? '\n...' : ''}</pre>
+    `;
+  } else {
+    div.innerHTML = '<p style="color:var(--text-dim)">No resume uploaded yet.</p>';
+  }
+}
+
+// ── API Keys ────────────────────────────────────────────────────────
+async function loadEnvKeys() {
+  const data = await api('/api/env');
+  if (data.error) return;
+  const keys = ['GEMINI_API_KEY','OPENAI_API_KEY','ANTHROPIC_API_KEY','LLM_MODEL','LLM_URL','CAPSOLVER_API_KEY'];
+  keys.forEach(k => {
+    const input = document.getElementById('env-' + k);
+    if (input && data[k] && data[k].is_set) {
+      input.placeholder = data[k].value + ' (currently set)';
+    }
+  });
+}
+
+async function saveEnv() {
+  const keys = ['GEMINI_API_KEY','OPENAI_API_KEY','ANTHROPIC_API_KEY','LLM_MODEL','LLM_URL','CAPSOLVER_API_KEY'];
+  const env = {};
+
+  // First load existing values
+  const existing = await api('/api/env');
+
+  keys.forEach(k => {
+    const input = document.getElementById('env-' + k);
+    if (input && input.value.trim()) {
+      env[k] = input.value.trim();
+    }
+  });
+
+  if (Object.keys(env).length === 0) {
+    toast('No values to save', 'err');
+    return;
+  }
+
+  const r = await api('/api/env', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(env),
+  });
+
+  if (r.error) { toast(r.error, 'err'); } else { toast('API keys saved!'); }
+}
+
+// ── Profile ─────────────────────────────────────────────────────────
+let currentProfile = {};
+
+const profileFields = {
+  'Personal': {
+    'full_name': 'Full Name',
+    'email': 'Email',
+    'phone': 'Phone',
+    'city': 'City',
+    'province_state': 'Province/State',
+    'country': 'Country',
+    'linkedin_url': 'LinkedIn URL',
+    'github_url': 'GitHub URL',
+    'portfolio_url': 'Portfolio URL',
+    'website_url': 'Website URL',
+  },
+  'Experience': {
+    'years_of_experience_total': 'Years of Experience',
+    'education_level': 'Education Level',
+    'current_title': 'Current Title',
+    'target_role': 'Target Role',
+  },
+  'Work Authorization': {
+    'legally_authorized_to_work': 'Authorized to Work (yes/no)',
+    'require_sponsorship': 'Require Sponsorship (yes/no)',
+    'work_permit_type': 'Work Permit Type',
+  },
+  'Compensation': {
+    'salary_expectation': 'Salary Expectation',
+    'salary_currency': 'Currency',
+    'salary_range_min': 'Min Salary',
+    'salary_range_max': 'Max Salary',
+  },
+};
+
+async function loadProfile() {
+  const data = await api('/api/profile');
+  const form = document.getElementById('profile-form');
+
+  if (!data.exists) {
+    form.innerHTML = '<p style="color:var(--text-dim)">No profile found. Upload a resume and click "Auto-Fill from Resume" to create one.</p>';
+    currentProfile = {};
+    return;
+  }
+
+  currentProfile = data.profile;
+  renderProfileForm(data.profile);
+}
+
+function renderProfileForm(profile) {
+  const form = document.getElementById('profile-form');
+  let html = '';
+
+  for (const [section, fields] of Object.entries(profileFields)) {
+    const sectionKey = section.toLowerCase().replace(/ /g, '_');
+    const sectionData = profile[sectionKey] || {};
+    html += `<h3>${section}</h3><div class="profile-grid">`;
+    for (const [key, label] of Object.entries(fields)) {
+      const val = sectionData[key] || '';
+      html += `<div class="form-group">
+        <label>${label}</label>
+        <input type="text" data-section="${sectionKey}" data-key="${key}" value="${esc(String(val))}">
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  // Skills boundary
+  const skills = profile.skills_boundary || {};
+  html += '<h3>Skills Boundary</h3>';
+  html += '<div class="form-group"><label>Programming Languages (comma-separated)</label>';
+  html += `<input type="text" id="prof-skills-langs" value="${esc((skills.programming_languages || []).join(', '))}"></div>`;
+  html += '<div class="form-group"><label>Frameworks (comma-separated)</label>';
+  html += `<input type="text" id="prof-skills-frameworks" value="${esc((skills.frameworks || []).join(', '))}"></div>`;
+  html += '<div class="form-group"><label>Tools (comma-separated)</label>';
+  html += `<input type="text" id="prof-skills-tools" value="${esc((skills.tools || []).join(', '))}"></div>`;
+
+  // Resume facts
+  const facts = profile.resume_facts || {};
+  html += '<h3>Resume Facts</h3>';
+  html += '<div class="form-group"><label>Preserved Companies (comma-separated)</label>';
+  html += `<input type="text" id="prof-companies" value="${esc((facts.preserved_companies || []).join(', '))}"></div>`;
+  html += '<div class="form-group"><label>Preserved Projects (comma-separated)</label>';
+  html += `<input type="text" id="prof-projects" value="${esc((facts.preserved_projects || []).join(', '))}"></div>`;
+  html += '<div class="form-group"><label>Preserved School</label>';
+  html += `<input type="text" id="prof-school" value="${esc(facts.preserved_school || '')}"></div>`;
+
+  form.innerHTML = html;
+}
+
+async function saveProfile() {
+  const profile = JSON.parse(JSON.stringify(currentProfile));
+
+  // Read section fields
+  document.querySelectorAll('#profile-form input[data-section]').forEach(input => {
+    const section = input.dataset.section;
+    const key = input.dataset.key;
+    if (!profile[section]) profile[section] = {};
+    profile[section][key] = input.value;
+  });
+
+  // Skills
+  const splitCsv = v => v.split(',').map(s => s.trim()).filter(Boolean);
+  profile.skills_boundary = {
+    programming_languages: splitCsv(document.getElementById('prof-skills-langs')?.value || ''),
+    frameworks: splitCsv(document.getElementById('prof-skills-frameworks')?.value || ''),
+    tools: splitCsv(document.getElementById('prof-skills-tools')?.value || ''),
+  };
+
+  // Resume facts
+  profile.resume_facts = {
+    ...(profile.resume_facts || {}),
+    preserved_companies: splitCsv(document.getElementById('prof-companies')?.value || ''),
+    preserved_projects: splitCsv(document.getElementById('prof-projects')?.value || ''),
+    preserved_school: document.getElementById('prof-school')?.value || '',
+  };
+
+  const r = await api('/api/profile', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(profile),
+  });
+
+  if (r.error) { toast(r.error, 'err'); } else { toast('Profile saved!'); currentProfile = profile; }
+}
+
+async function parseResume() {
+  toast('Parsing resume with LLM... this may take a moment');
+  const r = await api('/api/parse-resume', { method: 'POST' });
+  if (r.error) {
+    toast(r.error, 'err');
+  } else {
+    currentProfile = r.profile;
+    renderProfileForm(r.profile);
+    toast('Profile extracted from resume!');
+  }
+}
+
+// ── Pipeline ────────────────────────────────────────────────────────
+async function runPipeline() {
+  const checkboxes = document.querySelectorAll('#pipeline-stages input:checked');
+  const stages = Array.from(checkboxes).map(c => c.value);
+  if (!stages.length) { toast('Select at least one stage', 'err'); return; }
+
+  const minScore = parseInt(document.getElementById('pipeline-min-score').value) || 7;
+  const workers = parseInt(document.getElementById('pipeline-workers').value) || 1;
+  const validation = document.getElementById('pipeline-validation').value;
+
+  const r = await api('/api/pipeline/run', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ stages, min_score: minScore, workers, validation_mode: validation }),
+  });
+
+  if (r.error) { toast(r.error, 'err'); return; }
+  toast('Pipeline started!');
+  document.getElementById('run-pipeline-btn').disabled = true;
+  pollPipelineStatus();
+}
+
+let pipelinePollId;
+async function pollPipelineStatus() {
+  clearInterval(pipelinePollId);
+
+  const update = async () => {
+    const s = await api('/api/pipeline/status');
+    renderPipelineStatus(s);
+    if (!s.running) {
+      clearInterval(pipelinePollId);
+      document.getElementById('run-pipeline-btn').disabled = false;
+    }
+  };
+
+  await update();
+  pipelinePollId = setInterval(update, 2000);
+}
+
+function renderPipelineStatus(s) {
+  const statusDiv = document.getElementById('pipeline-status');
+  const resultsDiv = document.getElementById('pipeline-results');
+
+  if (!s.started_at && !s.results?.length) {
+    statusDiv.innerHTML = '<p style="color:var(--text-dim)">No pipeline run in this session.</p>';
+    resultsDiv.innerHTML = '';
+    return;
+  }
+
+  // Stage chips
+  const allStages = s.stages || [];
+  const completedStages = (s.results || []).map(r => r.stage);
+  const current = s.current_stage;
+
+  let chipsHtml = '<div class="pipeline-stages">';
+  allStages.forEach(stage => {
+    const result = (s.results || []).find(r => r.stage === stage);
+    let cls = '';
+    if (result) cls = result.status === 'ok' ? 'done' : 'error';
+    else if (stage === current) cls = 'running';
+    const icon = result ? (result.status === 'ok' ? '&#10003;' : '&#10007;') : (stage === current ? '&#9679;' : '&#9675;');
+    chipsHtml += `<div class="stage-chip ${cls}">${icon} ${stage}${result ? ` (${result.elapsed}s)` : ''}</div>`;
+  });
+  chipsHtml += '</div>';
+
+  const runningHtml = s.running ?
+    `<p style="color:var(--accent);margin-bottom:8px;">Running: <strong>${current || '...'}</strong></p>` :
+    (s.finished_at ? `<p style="color:var(--green);margin-bottom:8px;">Completed in ${((s.finished_at - s.started_at) || 0).toFixed(1)}s</p>` : '');
+
+  statusDiv.innerHTML = runningHtml + chipsHtml;
+
+  if (s.error) {
+    statusDiv.innerHTML += `<p style="color:var(--red);margin-top:8px;">Error: ${esc(s.error)}</p>`;
+  }
+
+  // Results table
+  if (s.results && s.results.length) {
+    resultsDiv.innerHTML = '<h3>Results</h3><table><thead><tr><th>Stage</th><th>Status</th><th>Time</th></tr></thead><tbody>' +
+      s.results.map(r => {
+        const badge = r.status === 'ok' ? 'badge-ok' : 'badge-err';
+        return `<tr><td>${r.stage}</td><td><span class="badge ${badge}">${r.status}</span></td><td>${r.elapsed}s</td></tr>`;
+      }).join('') + '</tbody></table>';
+  }
+}
+
+// ── Files ───────────────────────────────────────────────────────────
+async function loadFiles() {
+  const data = await api('/api/tailored');
+  if (data.error) return;
+
+  const resumesDiv = document.getElementById('files-resumes');
+  const coversDiv = document.getElementById('files-covers');
+
+  if (data.resumes && data.resumes.length) {
+    resumesDiv.innerHTML = '<table><thead><tr><th>Filename</th><th>Type</th><th>Size</th><th></th></tr></thead><tbody>' +
+      data.resumes.map(f => `<tr>
+        <td>${esc(f.filename)}</td>
+        <td><span class="badge badge-info">${f.type}</span></td>
+        <td>${formatBytes(f.size)}</td>
+        <td>
+          <button class="btn btn-secondary btn-sm" onclick="viewFile('${esc(f.path)}')">View</button>
+          <a href="/api/file/download?path=${encodeURIComponent(f.path)}" class="btn btn-secondary btn-sm" style="margin-left:4px;">Download</a>
+        </td>
+      </tr>`).join('') + '</tbody></table>';
+  } else {
+    resumesDiv.innerHTML = '<p style="color:var(--text-dim);padding:16px;">No tailored resumes generated yet. Run the pipeline to create them.</p>';
+  }
+
+  if (data.covers && data.covers.length) {
+    coversDiv.innerHTML = '<table><thead><tr><th>Filename</th><th>Type</th><th>Size</th><th></th></tr></thead><tbody>' +
+      data.covers.map(f => `<tr>
+        <td>${esc(f.filename)}</td>
+        <td><span class="badge badge-info">${f.type}</span></td>
+        <td>${formatBytes(f.size)}</td>
+        <td>
+          <button class="btn btn-secondary btn-sm" onclick="viewFile('${esc(f.path)}')">View</button>
+          <a href="/api/file/download?path=${encodeURIComponent(f.path)}" class="btn btn-secondary btn-sm" style="margin-left:4px;">Download</a>
+        </td>
+      </tr>`).join('') + '</tbody></table>';
+  } else {
+    coversDiv.innerHTML = '<p style="color:var(--text-dim);padding:16px;">No cover letters generated yet.</p>';
+  }
+}
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
+}
+
+async function viewFile(path) {
+  const data = await api('/api/file/view?path=' + encodeURIComponent(path));
+  if (data.error) { toast(data.error, 'err'); return; }
+  document.getElementById('file-modal-title').textContent = data.filename;
+  document.getElementById('file-modal-content').textContent = data.content;
+  document.getElementById('file-modal').classList.add('show');
+}
+function closeModal() { document.getElementById('file-modal').classList.remove('show'); }
+
+// ── Doctor ──────────────────────────────────────────────────────────
+async function loadDoctor() {
+  const data = await api('/api/doctor');
+  if (data.error) { return; }
+
+  let html = `<div class="card" style="margin-bottom:16px;"><div class="label">Current Tier</div><div class="value accent">${data.tier}</div><p style="color:var(--text-dim);font-size:13px;margin-top:4px;">${esc(data.tier_label)}</p></div>`;
+
+  html += '<table><thead><tr><th>Check</th><th>Status</th><th>Details</th></tr></thead><tbody>';
+  data.checks.forEach(c => {
+    const badge = c.ok ? '<span class="badge badge-ok">OK</span>' : '<span class="badge badge-err">MISSING</span>';
+    html += `<tr><td>${esc(c.name)}</td><td>${badge}</td><td style="font-size:12px;color:var(--text-dim)">${esc(c.note)}</td></tr>`;
+  });
+  html += '</tbody></table>';
+
+  document.getElementById('doctor-results').innerHTML = html;
+}
+
+// ── Search Config ───────────────────────────────────────────────────
+async function loadSearches() {
+  const data = await api('/api/searches');
+  const editor = document.getElementById('searches-editor');
+  if (data.exists) {
+    editor.value = data.content;
+  } else {
+    editor.value = '# No searches.yaml found. Create one with your job search queries.\n# Example:\n#\n# locations:\n#   - "Remote"\n#   - "New York, NY"\n#\n# queries:\n#   - title: "Software Engineer"\n#     tier: 1\n';
+  }
+}
+
+async function saveSearches() {
+  const content = document.getElementById('searches-editor').value;
+  const r = await api('/api/searches', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ content }),
+  });
+  if (r.error) { toast(r.error, 'err'); } else { toast('Search config saved!'); }
+}
+
+// ── Env Display ─────────────────────────────────────────────────────
+async function loadEnvDisplay() {
+  const data = await api('/api/env');
+  const div = document.getElementById('env-display');
+  if (!div) return;
+  if (data.error || !Object.keys(data).length) {
+    div.innerHTML = '<p style="color:var(--text-dim)">No environment variables configured. Go to Setup > API Keys.</p>';
+    return;
+  }
+  div.innerHTML = '<table><thead><tr><th>Variable</th><th>Value</th><th>Status</th></tr></thead><tbody>' +
+    Object.entries(data).map(([k, v]) =>
+      `<tr><td style="font-family:monospace">${esc(k)}</td><td style="font-family:monospace">${esc(v.value)}</td><td>${v.is_set ? '<span class="badge badge-ok">SET</span>' : '<span class="badge badge-warn">EMPTY</span>'}</td></tr>`
+    ).join('') + '</tbody></table>';
+}
+
+// ── Modal close on overlay click ────────────────────────────────────
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.classList.remove('show');
+  });
+});
+
+// ── Init ────────────────────────────────────────────────────────────
+loadDashboard();
+</script>
+</body>
+</html>

@@ -210,6 +210,7 @@ class LLMClient:
 
 
 _instance: LLMClient | None = None
+_haiku_instance: LLMClient | None = None
 
 
 def get_client() -> LLMClient:
@@ -226,6 +227,28 @@ def get_client() -> LLMClient:
         log.info("LLM provider: %s  model: %s", config.provider, config.model)
         _instance = LLMClient(config)
     return _instance
+
+
+def get_haiku_client() -> LLMClient:
+    """Return (or create) a dedicated Haiku client for lightweight verification tasks."""
+    global _haiku_instance
+    if _haiku_instance is None:
+        try:
+            from applypilot.config import load_env
+
+            load_env()
+        except ModuleNotFoundError:
+            log.debug("python-dotenv not installed; skipping .env auto-load in llm.get_haiku_client().")
+        config = resolve_llm_config()
+        haiku_config = LLMConfig(
+            provider="anthropic",
+            api_base=config.api_base,
+            model="anthropic/claude-haiku-4-5",
+            api_key=os.environ.get("ANTHROPIC_API_KEY", config.api_key),
+        )
+        log.info("Haiku verification client: %s", haiku_config.model)
+        _haiku_instance = LLMClient(haiku_config)
+    return _haiku_instance
 
 
 def validate_api_key(provider: str, api_key: str, model: str = "", endpoint: str = "") -> tuple[bool, str]:
