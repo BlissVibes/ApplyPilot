@@ -370,29 +370,6 @@ def gui(
 
 
 @app.command()
-def gui(
-    host: str = typer.Option("127.0.0.1", "--host", help="Host to bind to."),
-    port: int = typer.Option(5000, "--port", "-p", help="Port to run on."),
-    debug: bool = typer.Option(False, "--debug", help="Enable Flask debug mode."),
-) -> None:
-    """Launch the web GUI in your browser."""
-    _bootstrap()
-
-    from applypilot.web import start_gui
-    import webbrowser
-
-    url = f"http://{host}:{port}"
-    console.print(f"\n[bold blue]ApplyPilot GUI[/bold blue] starting at {url}")
-    console.print("[dim]Press Ctrl+C to stop[/dim]\n")
-
-    # Open browser after a short delay
-    import threading
-    threading.Timer(1.5, lambda: webbrowser.open(url)).start()
-
-    start_gui(host=host, port=port, debug=debug)
-
-
-@app.command()
 def doctor() -> None:
     """Check your setup and diagnose missing requirements."""
     import shutil
