@@ -397,12 +397,56 @@ textarea { min-height:100px; resize:vertical; }
           <button class="btn btn-sm" onclick="addQuery()" style="margin-top:8px;">+ Add Query</button>
         </div>
 
-        <!-- Locations -->
+        <!-- Search Locations -->
         <div class="card" style="margin-bottom:16px;padding:16px;">
           <h3 style="margin-bottom:8px;">Search Locations</h3>
           <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Add locations with optional search radius (0 = remote-only)</p>
           <div id="locations-list"></div>
           <button class="btn btn-sm" onclick="addLocation()" style="margin-top:8px;">+ Add Location</button>
+        </div>
+
+        <!-- Remote Locations (Global Locations) -->
+        <div class="card" style="margin-bottom:16px;padding:16px;">
+          <h3 style="margin-bottom:8px;">Global Remote Locations (Special Forces)</h3>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Search for remote jobs worldwide across continents. Build your remote job task force!</p>
+
+          <div style="margin-bottom:16px;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;margin-bottom:8px;">
+              <input type="checkbox" id="global-remote-enable" onchange="toggleGlobalRemote()">
+              <strong>Enable Global Remote Search</strong>
+            </label>
+          </div>
+
+          <div id="global-remote-panel" style="display:none;background:rgba(108,138,255,.05);padding:12px;border-radius:6px;border:1px solid var(--border);">
+            <!-- Continents -->
+            <div style="margin-bottom:16px;">
+              <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;" id="continent-buttons">
+                <button class="btn btn-sm" onclick="toggleContinent('north-america')" style="opacity:.6;">North America</button>
+                <button class="btn btn-sm" onclick="toggleContinent('south-america')" style="opacity:.6;">South America</button>
+                <button class="btn btn-sm" onclick="toggleContinent('europe-north')" style="opacity:.6;">Europe (North)</button>
+                <button class="btn btn-sm" onclick="toggleContinent('europe-east')" style="opacity:.6;">Europe (East)</button>
+                <button class="btn btn-sm" onclick="toggleContinent('europe-south')" style="opacity:.6;">Europe (South)</button>
+                <button class="btn btn-sm" onclick="toggleContinent('europe-west')" style="opacity:.6;">Europe (West)</button>
+                <button class="btn btn-sm" onclick="toggleContinent('africa')" style="opacity:.6;">Africa</button>
+                <button class="btn btn-sm" onclick="toggleContinent('asia-east')" style="opacity:.6;">Asia (East)</button>
+                <button class="btn btn-sm" onclick="toggleContinent('asia-south')" style="opacity:.6;">Asia (South)</button>
+                <button class="btn btn-sm" onclick="toggleContinent('asia-southeast')" style="opacity:.6;">Asia (SE)</button>
+                <button class="btn btn-sm" onclick="toggleContinent('middle-east')" style="opacity:.6;">Middle East</button>
+                <button class="btn btn-sm" onclick="toggleContinent('oceania')" style="opacity:.6;">Oceania</button>
+              </div>
+            </div>
+
+            <!-- Countries/Regions -->
+            <div id="global-countries-panel" style="display:none;max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:12px;background:var(--surface2);">
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;" id="countries-list"></div>
+            </div>
+
+            <!-- Selected locations summary -->
+            <div style="margin-top:12px;">
+              <p style="font-size:12px;color:var(--text-dim);margin-bottom:6px;">Selected: <span id="global-remote-count" style="color:var(--accent);font-weight:bold;">0</span> locations</p>
+              <div id="global-remote-selected" class="tag-list"></div>
+            </div>
+          </div>
         </div>
 
         <!-- Job Boards -->
@@ -1145,6 +1189,170 @@ async function loadDoctor() {
   document.getElementById('doctor-results').innerHTML = html;
 }
 
+// ── Global Remote Locations Data ────────────────────────────────────
+const GLOBAL_LOCATIONS = {
+  'north-america': {
+    name: 'North America',
+    countries: {
+      'USA': { name: 'United States', regions: ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'] },
+      'Canada': { name: 'Canada', regions: ['AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'ON', 'PE', 'QC', 'SK', 'NT', 'NU', 'YT'] },
+      'Mexico': { name: 'Mexico', regions: null },
+    }
+  },
+  'south-america': {
+    name: 'South America',
+    countries: {
+      'Argentina': { name: 'Argentina', regions: null },
+      'Brazil': { name: 'Brazil', regions: null },
+      'Chile': { name: 'Chile', regions: null },
+      'Colombia': { name: 'Colombia', regions: null },
+      'Peru': { name: 'Peru', regions: null },
+      'Uruguay': { name: 'Uruguay', regions: null },
+      'Venezuela': { name: 'Venezuela', regions: null },
+    }
+  },
+  'europe-north': {
+    name: 'Europe (North)',
+    countries: {
+      'Denmark': { name: 'Denmark', regions: null },
+      'Estonia': { name: 'Estonia', regions: null },
+      'Finland': { name: 'Finland', regions: null },
+      'Iceland': { name: 'Iceland', regions: null },
+      'Latvia': { name: 'Latvia', regions: null },
+      'Lithuania': { name: 'Lithuania', regions: null },
+      'Norway': { name: 'Norway', regions: null },
+      'Sweden': { name: 'Sweden', regions: null },
+    }
+  },
+  'europe-east': {
+    name: 'Europe (East)',
+    countries: {
+      'Belarus': { name: 'Belarus', regions: null },
+      'Bulgaria': { name: 'Bulgaria', regions: null },
+      'Czech Republic': { name: 'Czech Republic', regions: null },
+      'Hungary': { name: 'Hungary', regions: null },
+      'Poland': { name: 'Poland', regions: null },
+      'Romania': { name: 'Romania', regions: null },
+      'Russia': { name: 'Russia', regions: null },
+      'Slovakia': { name: 'Slovakia', regions: null },
+      'Ukraine': { name: 'Ukraine', regions: null },
+    }
+  },
+  'europe-south': {
+    name: 'Europe (South)',
+    countries: {
+      'Albania': { name: 'Albania', regions: null },
+      'Bosnia': { name: 'Bosnia & Herzegovina', regions: null },
+      'Croatia': { name: 'Croatia', regions: null },
+      'Cyprus': { name: 'Cyprus', regions: null },
+      'Greece': { name: 'Greece', regions: null },
+      'Italy': { name: 'Italy', regions: null },
+      'Malta': { name: 'Malta', regions: null },
+      'Montenegro': { name: 'Montenegro', regions: null },
+      'Portugal': { name: 'Portugal', regions: null },
+      'Serbia': { name: 'Serbia', regions: null },
+      'Slovenia': { name: 'Slovenia', regions: null },
+      'Spain': { name: 'Spain', regions: null },
+    }
+  },
+  'europe-west': {
+    name: 'Europe (West)',
+    countries: {
+      'Austria': { name: 'Austria', regions: null },
+      'Belgium': { name: 'Belgium', regions: null },
+      'France': { name: 'France', regions: null },
+      'Germany': { name: 'Germany', regions: null },
+      'Ireland': { name: 'Ireland', regions: null },
+      'Luxembourg': { name: 'Luxembourg', regions: null },
+      'Netherlands': { name: 'Netherlands', regions: null },
+      'Switzerland': { name: 'Switzerland', regions: null },
+      'United Kingdom': { name: 'United Kingdom', regions: null },
+    }
+  },
+  'africa': {
+    name: 'Africa',
+    countries: {
+      'Egypt': { name: 'Egypt', regions: null },
+      'Kenya': { name: 'Kenya', regions: null },
+      'Morocco': { name: 'Morocco', regions: null },
+      'Nigeria': { name: 'Nigeria', regions: null },
+      'South Africa': { name: 'South Africa', regions: null },
+      'Tunisia': { name: 'Tunisia', regions: null },
+    }
+  },
+  'asia-east': {
+    name: 'Asia (East)',
+    countries: {
+      'China': { name: 'China', regions: null },
+      'Hong Kong': { name: 'Hong Kong', regions: null },
+      'Japan': { name: 'Japan', regions: null },
+      'Mongolia': { name: 'Mongolia', regions: null },
+      'North Korea': { name: 'North Korea', regions: null },
+      'South Korea': { name: 'South Korea', regions: null },
+      'Taiwan': { name: 'Taiwan', regions: null },
+    }
+  },
+  'asia-south': {
+    name: 'Asia (South)',
+    countries: {
+      'Afghanistan': { name: 'Afghanistan', regions: null },
+      'Bangladesh': { name: 'Bangladesh', regions: null },
+      'Bhutan': { name: 'Bhutan', regions: null },
+      'India': { name: 'India', regions: null },
+      'Iran': { name: 'Iran', regions: null },
+      'Maldives': { name: 'Maldives', regions: null },
+      'Nepal': { name: 'Nepal', regions: null },
+      'Pakistan': { name: 'Pakistan', regions: null },
+      'Sri Lanka': { name: 'Sri Lanka', regions: null },
+    }
+  },
+  'asia-southeast': {
+    name: 'Asia (Southeast)',
+    countries: {
+      'Brunei': { name: 'Brunei', regions: null },
+      'Cambodia': { name: 'Cambodia', regions: null },
+      'Indonesia': { name: 'Indonesia', regions: null },
+      'Laos': { name: 'Laos', regions: null },
+      'Malaysia': { name: 'Malaysia', regions: null },
+      'Myanmar': { name: 'Myanmar', regions: null },
+      'Philippines': { name: 'Philippines', regions: null },
+      'Singapore': { name: 'Singapore', regions: null },
+      'Thailand': { name: 'Thailand', regions: null },
+      'Vietnam': { name: 'Vietnam', regions: null },
+    }
+  },
+  'middle-east': {
+    name: 'Middle East',
+    countries: {
+      'Bahrain': { name: 'Bahrain', regions: null },
+      'Iraq': { name: 'Iraq', regions: null },
+      'Israel': { name: 'Israel', regions: null },
+      'Jordan': { name: 'Jordan', regions: null },
+      'Kuwait': { name: 'Kuwait', regions: null },
+      'Lebanon': { name: 'Lebanon', regions: null },
+      'Oman': { name: 'Oman', regions: null },
+      'Qatar': { name: 'Qatar', regions: null },
+      'Saudi Arabia': { name: 'Saudi Arabia', regions: null },
+      'Syria': { name: 'Syria', regions: null },
+      'Turkey': { name: 'Turkey', regions: null },
+      'UAE': { name: 'United Arab Emirates', regions: null },
+      'Yemen': { name: 'Yemen', regions: null },
+    }
+  },
+  'oceania': {
+    name: 'Oceania',
+    countries: {
+      'Australia': { name: 'Australia', regions: ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'] },
+      'Fiji': { name: 'Fiji', regions: null },
+      'New Zealand': { name: 'New Zealand', regions: null },
+      'Papua New Guinea': { name: 'Papua New Guinea', regions: null },
+      'Samoa': { name: 'Samoa', regions: null },
+    }
+  },
+};
+
+let _globalRemoteSelected = {};  // {continent: {country: [regions]}}
+
 // ── Search Config ───────────────────────────────────────────────────
 let _searchData = {};  // Holds current form state
 
@@ -1164,11 +1372,32 @@ async function loadSearches() {
     country: 'USA', boards: ['indeed','linkedin','glassdoor','zip_recruiter','google'],
     defaults: {results_per_site: 100, hours_old: 72},
     exclusions: {titles: [], experience: [], description: [], salary: []},
+    global_remote_locations: [],
   };
   // Convert hours_old to days if present
   if (_searchData.defaults && _searchData.defaults.hours_old && !_searchData.defaults.days_old) {
     _searchData.defaults.days_old = Math.ceil(_searchData.defaults.hours_old / 24);
   }
+
+  // Load global remote locations if present
+  if (_searchData.global_remote_locations && _searchData.global_remote_locations.length > 0) {
+    document.getElementById('global-remote-enable').checked = true;
+    _globalRemoteSelected = {};
+    for (const continent of Object.keys(GLOBAL_LOCATIONS)) {
+      _globalRemoteSelected[continent] = {};
+    }
+    // Rebuild selection from saved data
+    _searchData.global_remote_locations.forEach(loc => {
+      const continent = loc.continent;
+      const country = loc.country;
+      if (loc.regions && loc.regions.length > 0) {
+        _globalRemoteSelected[continent][country] = loc.regions;
+      } else {
+        _globalRemoteSelected[continent][country] = true;
+      }
+    });
+  }
+
   renderSearchForm();
 }
 
@@ -1326,6 +1555,14 @@ function collectFormData() {
     hours_old: daysOld * 24,  // Convert days to hours for backend
     days_old: daysOld,
   };
+
+  // Collect global remote locations if enabled
+  if (document.getElementById('global-remote-enable').checked) {
+    _searchData.global_remote_locations = getGlobalRemoteLocations();
+  } else {
+    _searchData.global_remote_locations = [];
+  }
+
   return _searchData;
 }
 
@@ -1347,6 +1584,144 @@ async function saveSearches() {
     body: JSON.stringify({ content }),
   });
   if (r.error) { toast(r.error, 'err'); } else { toast('Search config saved!'); }
+}
+
+// ── Global Remote Functions ──────────────────────────────────────────
+function toggleGlobalRemote() {
+  const enabled = document.getElementById('global-remote-enable').checked;
+  document.getElementById('global-remote-panel').style.display = enabled ? '' : 'none';
+  if (enabled && Object.keys(_globalRemoteSelected).length === 0) {
+    renderGlobalRemoteUI();
+  }
+}
+
+function toggleContinent(continent) {
+  const panel = document.getElementById('global-countries-panel');
+  if (panel.style.display === 'none' || panel.dataset.continent !== continent) {
+    panel.dataset.continent = continent;
+    renderCountriesPanel(continent);
+    panel.style.display = '';
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+function renderGlobalRemoteUI() {
+  // Initialize empty selection if needed
+  if (Object.keys(_globalRemoteSelected).length === 0) {
+    for (const continent of Object.keys(GLOBAL_LOCATIONS)) {
+      _globalRemoteSelected[continent] = {};
+    }
+  }
+  updateGlobalRemoteDisplay();
+}
+
+function renderCountriesPanel(continent) {
+  const data = GLOBAL_LOCATIONS[continent];
+  let html = '';
+  for (const [countryKey, countryData] of Object.entries(data.countries)) {
+    const selected = _globalRemoteSelected[continent] && _globalRemoteSelected[continent][countryKey];
+    const regions = countryData.regions;
+    const hasSubRegions = regions && regions.length > 1;
+
+    html += `<div style="padding:8px;border:1px solid var(--border);border-radius:4px;">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:${hasSubRegions ? '6px' : '0'};">
+        <input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleCountry('${continent}', '${countryKey}', this.checked)">
+        <strong style="font-size:12px;">${countryData.name}</strong>
+      </label>`;
+
+    if (hasSubRegions && selected) {
+      const selectedRegions = _globalRemoteSelected[continent][countryKey] || [];
+      html += `<div style="margin-left:24px;display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;">`;
+      regions.forEach(region => {
+        const regionSelected = selectedRegions.includes(region);
+        html += `<label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" ${regionSelected ? 'checked' : ''} onchange="toggleRegion('${continent}', '${countryKey}', '${region}', this.checked)">
+          ${region}
+        </label>`;
+      });
+      html += '</div>';
+    }
+
+    html += '</div>';
+  }
+  document.getElementById('countries-list').innerHTML = html;
+}
+
+function toggleCountry(continent, country, checked) {
+  if (!_globalRemoteSelected[continent]) _globalRemoteSelected[continent] = {};
+
+  if (checked) {
+    const regions = GLOBAL_LOCATIONS[continent].countries[country].regions;
+    if (regions) {
+      // Multi-region country - select all regions by default
+      _globalRemoteSelected[continent][country] = [...regions];
+    } else {
+      // Single country
+      _globalRemoteSelected[continent][country] = true;
+    }
+  } else {
+    delete _globalRemoteSelected[continent][country];
+  }
+
+  renderCountriesPanel(document.getElementById('global-countries-panel').dataset.continent);
+  updateGlobalRemoteDisplay();
+}
+
+function toggleRegion(continent, country, region, checked) {
+  if (!_globalRemoteSelected[continent][country]) _globalRemoteSelected[continent][country] = [];
+
+  if (checked) {
+    if (!_globalRemoteSelected[continent][country].includes(region)) {
+      _globalRemoteSelected[continent][country].push(region);
+    }
+  } else {
+    _globalRemoteSelected[continent][country] = _globalRemoteSelected[continent][country].filter(r => r !== region);
+    if (_globalRemoteSelected[continent][country].length === 0) {
+      delete _globalRemoteSelected[continent][country];
+    }
+  }
+
+  updateGlobalRemoteDisplay();
+}
+
+function updateGlobalRemoteDisplay() {
+  // Count total locations
+  let count = 0;
+  const tags = [];
+
+  for (const [continent, countries] of Object.entries(_globalRemoteSelected)) {
+    for (const [country, selection] of Object.entries(countries)) {
+      if (selection === true) {
+        count++;
+        const countryName = GLOBAL_LOCATIONS[continent].countries[country].name;
+        tags.push(`<span class="tag-item">${countryName}</span>`);
+      } else if (Array.isArray(selection)) {
+        const regionNames = selection.map(r => `${r}`).join(', ');
+        const countryName = GLOBAL_LOCATIONS[continent].countries[country].name;
+        count += selection.length;
+        tags.push(`<span class="tag-item">${countryName} (${regionNames})</span>`);
+      }
+    }
+  }
+
+  document.getElementById('global-remote-count').textContent = count;
+  document.getElementById('global-remote-selected').innerHTML = tags.join('');
+}
+
+function getGlobalRemoteLocations() {
+  // Convert selected to location array format
+  const locations = [];
+  for (const [continent, countries] of Object.entries(_globalRemoteSelected)) {
+    for (const [country, selection] of Object.entries(countries)) {
+      if (selection === true) {
+        locations.push({ country, continent, remote: true });
+      } else if (Array.isArray(selection) && selection.length > 0) {
+        locations.push({ country, regions: selection, continent, remote: true });
+      }
+    }
+  }
+  return locations;
 }
 
 // ── Env Display ─────────────────────────────────────────────────────

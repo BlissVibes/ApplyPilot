@@ -329,6 +329,7 @@ def api_searches_get():
                     "country": "USA", "boards": ["indeed", "linkedin", "glassdoor", "zip_recruiter", "google"],
                     "defaults": {"results_per_site": 100, "hours_old": 72, "days_old": 3},
                     "exclusions": {"titles": [], "experience": [], "description": [], "salary": []},
+                    "global_remote_locations": [],
                 }})
             return jsonify({"exists": False})
 
@@ -362,6 +363,9 @@ def api_searches_get():
                 }
             else:
                 data.setdefault("exclusions", {"titles": [], "experience": [], "description": [], "salary": []})
+
+            # Add global_remote_locations if not present
+            data.setdefault("global_remote_locations", [])
 
             return jsonify({"exists": True, "data": data})
         return jsonify({"exists": True, "content": content})
