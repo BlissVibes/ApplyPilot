@@ -15,6 +15,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request, render_template, send_file
 
+from applypilot import __version__
 from applypilot.config import (
     APP_DIR, PROFILE_PATH, RESUME_PATH, RESUME_PDF_PATH,
     SEARCH_CONFIG_PATH, ENV_PATH, TAILORED_DIR, COVER_LETTER_DIR,
@@ -126,7 +127,7 @@ def _run_pipeline_bg(stages: list[str], min_score: int, workers: int,
 def index():
     # Migrate legacy resume on startup if needed
     migrate_legacy_resume()
-    return render_template("index.html")
+    return render_template("index.html", version=__version__)
 
 
 # ---------------------------------------------------------------------------
