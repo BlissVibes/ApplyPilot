@@ -18,9 +18,18 @@ from flask import Flask, jsonify, request, render_template, send_file
 from applypilot.config import (
     APP_DIR, PROFILE_PATH, RESUME_PATH, RESUME_PDF_PATH,
     SEARCH_CONFIG_PATH, ENV_PATH, TAILORED_DIR, COVER_LETTER_DIR,
+    RESUMES_DIR, RESUMES_MANIFEST_PATH,
     ensure_dirs, load_env, load_profile,
+    get_resume_path, load_resumes_manifest, migrate_legacy_resume,
 )
 from applypilot.database import init_db, get_connection, get_stats, get_jobs_by_stage
+from applypilot.resume_manager import (
+    assign_resume_to_job, validate_resume_exists, get_default_resume_id, set_default_resume_id,
+    set_job_title_keywords, get_job_title_keywords, get_matching_resumes,
+    get_pending_conflicts, get_resolved_conflicts, resolve_conflict,
+    get_recommendation, get_learning_settings, set_learning_settings,
+    should_auto_send_conflict,
+)
 
 log = logging.getLogger(__name__)
 
@@ -115,6 +124,8 @@ def _run_pipeline_bg(stages: list[str], min_score: int, workers: int,
 
 @app.route("/")
 def index():
+    # Migrate legacy resume on startup if needed
+    migrate_legacy_resume()
     return render_template("index.html")
 
 
@@ -277,6 +288,428 @@ def api_resume_upload():
         return jsonify({"error": f"Unsupported file type: {ext}. Use .txt or .pdf"}), 400
 
 
+# ─── Multiple Resume Management ──────────────────────────────────────────
+
+@app.route("/api/resumes", methods=["GET"])
+def api_resumes_list():
+    """List all available resumes with metadata."""
+    migrate_legacy_resume()
+    manifest = load_resumes_manifest()
+    return jsonify({
+        "default_resume_id": manifest.get("default_resume_id", "default"),
+        "resumes": manifest.get("resumes", []),
+    })
+
+
+@app.route("/api/resumes", methods=["POST"])
+def api_resumes_upload():
+    """Upload a new named resume."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"error": "Empty filename"}), 400
+
+    resume_name = request.form.get("resume_name", Path(f.filename).stem)
+    resume_desc = request.form.get("resume_description", "")
+    tags = request.form.get("resume_tags", "")
+
+    ext = Path(f.filename).suffix.lower()
+    if ext not in [".txt", ".pdf"]:
+        return jsonify({"error": f"Unsupported file type: {ext}"}), 400
+
+    ensure_dirs()
+
+    # Create directory for resume
+    resume_id = resume_name.lower().replace(" ", "-")
+    resume_dir = RESUMES_DIR / resume_id
+    resume_dir.mkdir(parents=True, exist_ok=True)
+
+    # Extract text and save
+    if ext == ".txt":
+        content = f.read().decode("utf-8", errors="replace")
+        (resume_dir / "resume.txt").write_text(content, encoding="utf-8")
+        text_preview = content[:200]
+    else:  # PDF
+        pdf_bytes = f.read()
+        (resume_dir / "resume.pdf").write_bytes(pdf_bytes)
+        try:
+            from pypdf import PdfReader
+            import io
+            reader = PdfReader(io.BytesIO(pdf_bytes))
+            content = "\n".join(page.extract_text() or "" for page in reader.pages)
+            (resume_dir / "resume.txt").write_text(content, encoding="utf-8")
+            text_preview = content[:200]
+        except Exception as e:
+            text_preview = f"[PDF uploaded, text extraction failed: {e}]"
+
+    # Create metadata
+    import json
+    from datetime import datetime, timezone
+    info = {
+        "id": resume_id,
+        "name": resume_name,
+        "description": resume_desc,
+        "path": str(resume_dir / "resume.txt"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "tags": [t.strip() for t in tags.split(",") if t.strip()],
+        "is_default": False,
+    }
+    (resume_dir / "info.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
+
+    # Update manifest
+    manifest = load_resumes_manifest()
+    if "resumes" not in manifest:
+        manifest["resumes"] = []
+    # Remove if exists (update)
+    manifest["resumes"] = [r for r in manifest["resumes"] if r.get("id") != resume_id]
+    manifest["resumes"].append(info)
+    RESUMES_MANIFEST_PATH.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    return jsonify({
+        "status": "uploaded",
+        "resume_id": resume_id,
+        "name": resume_name,
+        "text_preview": text_preview,
+    })
+
+
+@app.route("/api/resumes/<resume_id>", methods=["GET"])
+def api_resume_detail(resume_id):
+    """Get resume content and metadata."""
+    if not validate_resume_exists(resume_id):
+        return jsonify({"error": "Resume not found"}), 404
+
+    resume_path = get_resume_path(resume_id)
+    manifest = load_resumes_manifest()
+    resume_info = next((r for r in manifest.get("resumes", []) if r.get("id") == resume_id), None)
+
+    try:
+        text = resume_path.read_text(encoding="utf-8")
+    except Exception as e:
+        return jsonify({"error": f"Failed to read resume: {e}"}), 500
+
+    return jsonify({
+        "id": resume_id,
+        "info": resume_info,
+        "text": text,
+        "length": len(text),
+    })
+
+
+@app.route("/api/resumes/<resume_id>", methods=["DELETE"])
+def api_resume_delete(resume_id):
+    """Delete a resume (prevent deleting 'default')."""
+    if resume_id == "default":
+        return jsonify({"error": "Cannot delete the default resume"}), 400
+
+    import shutil
+    resume_dir = RESUMES_DIR / resume_id
+    if resume_dir.exists():
+        shutil.rmtree(resume_dir)
+
+    # Update manifest
+    manifest = load_resumes_manifest()
+    manifest["resumes"] = [r for r in manifest.get("resumes", []) if r.get("id") != resume_id]
+    RESUMES_MANIFEST_PATH.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    return jsonify({"status": "deleted", "resume_id": resume_id})
+
+
+@app.route("/api/resumes/<resume_id>/set-default", methods=["POST"])
+def api_resume_set_default(resume_id):
+    """Set default resume for auto-selection."""
+    if not validate_resume_exists(resume_id):
+        return jsonify({"error": "Resume not found"}), 404
+
+    set_default_resume_id(resume_id)
+    return jsonify({"status": "set", "default_resume_id": resume_id})
+
+
+@app.route("/api/resumes/<resume_id>/keywords", methods=["GET"])
+def api_resume_keywords_get(resume_id):
+    """Get job title keywords for a resume."""
+    if not validate_resume_exists(resume_id):
+        return jsonify({"error": "Resume not found"}), 404
+
+    keywords = get_job_title_keywords(resume_id)
+    return jsonify({
+        "resume_id": resume_id,
+        "keywords": keywords,
+    })
+
+
+@app.route("/api/resumes/<resume_id>/keywords", methods=["POST"])
+def api_resume_keywords_set(resume_id):
+    """Set job title keywords for a resume.
+
+    These keywords are used to auto-select this resume for matching job titles.
+    """
+    if not validate_resume_exists(resume_id):
+        return jsonify({"error": "Resume not found"}), 404
+
+    data = request.get_json() or {}
+    keywords = data.get("keywords", [])
+
+    # Normalize to list of strings
+    if isinstance(keywords, str):
+        keywords = [k.strip() for k in keywords.replace(",", " ").split() if k.strip()]
+    elif not isinstance(keywords, list):
+        keywords = []
+
+    set_job_title_keywords(resume_id, keywords)
+
+    return jsonify({
+        "status": "set",
+        "resume_id": resume_id,
+        "keywords": keywords,
+    })
+
+
+@app.route("/api/job/<path:url>/resume", methods=["GET"])
+def api_job_resume_get(url):
+    """Get currently selected resume for a job."""
+    conn = get_connection()
+    job = conn.execute("SELECT resume_id, resume_selection_method, selected_resume_path FROM jobs WHERE url=?", (url,)).fetchone()
+
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    return jsonify({
+        "resume_id": job[0] or "default",
+        "selection_method": job[1] or "auto",
+        "selected_resume_path": job[2],
+    })
+
+
+@app.route("/api/job/<path:url>/resume", methods=["POST"])
+def api_job_resume_set(url):
+    """Override resume selection for a specific job."""
+    data = request.get_json() or {}
+    resume_id = data.get("resume_id", "default")
+
+    if not validate_resume_exists(resume_id):
+        return jsonify({"error": f"Resume '{resume_id}' not found"}), 404
+
+    conn = get_connection()
+    job = conn.execute("SELECT url FROM jobs WHERE url=?", (url,)).fetchone()
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    assign_resume_to_job(conn, url, resume_id, override=True)
+
+    return jsonify({
+        "status": "assigned",
+        "url": url,
+        "resume_id": resume_id,
+        "selection_method": "override",
+    })
+
+
+@app.route("/api/job/<path:url>/resume-matches", methods=["GET"])
+def api_job_resume_matches(url):
+    """Get all resumes that match a job's title, sorted by specificity.
+
+    Useful for detecting conflicts and showing which resumes would apply.
+    """
+    job = get_connection().execute(
+        "SELECT title FROM jobs WHERE url=?", (url,)
+    ).fetchone()
+
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    job_title = job[0] or ""
+    matches = get_matching_resumes(job_title)
+
+    return jsonify({
+        "url": url,
+        "job_title": job_title,
+        "matches": matches,
+        "match_count": len(matches),
+        "primary_match": matches[0]["resume_id"] if matches else None,
+    })
+
+
+# ─── Resume Conflict Queue ────────────────────────────────────────────
+
+@app.route("/api/resume-queue", methods=["GET"])
+def api_resume_queue():
+    """Get pending resume conflicts that need user review."""
+    conn = get_connection()
+    pending = get_pending_conflicts(conn)
+    return jsonify({
+        "pending": pending,
+        "count": len(pending),
+    })
+
+
+@app.route("/api/resume-queue/history", methods=["GET"])
+def api_resume_queue_history():
+    """Get recently resolved conflicts."""
+    limit = request.args.get("limit", 50, type=int)
+    conn = get_connection()
+    resolved = get_resolved_conflicts(conn, limit=limit)
+    return jsonify({
+        "resolved": resolved,
+        "count": len(resolved),
+    })
+
+
+@app.route("/api/resume-queue/<path:url>/resolve", methods=["POST"])
+def api_resume_queue_resolve(url):
+    """User resolves a conflict by choosing a resume for the job."""
+    data = request.get_json() or {}
+    resume_id = data.get("resume_id")
+
+    if not resume_id:
+        return jsonify({"error": "resume_id is required"}), 400
+
+    if not validate_resume_exists(resume_id):
+        return jsonify({"error": f"Resume '{resume_id}' not found"}), 404
+
+    conn = get_connection()
+
+    # Verify the conflict exists
+    row = conn.execute(
+        "SELECT url FROM resume_conflict_queue WHERE url=? AND resolved_at IS NULL",
+        (url,),
+    ).fetchone()
+    if not row:
+        return jsonify({"error": "No pending conflict found for this job"}), 404
+
+    resolve_conflict(conn, url, resume_id)
+
+    return jsonify({
+        "status": "resolved",
+        "url": url,
+        "chosen_resume_id": resume_id,
+    })
+
+
+@app.route("/api/resume-queue/<path:url>/skip", methods=["POST"])
+def api_resume_queue_skip(url):
+    """Skip a conflict by accepting the system's top match (specificity-based)."""
+    conn = get_connection()
+
+    row = conn.execute(
+        "SELECT matches_json FROM resume_conflict_queue WHERE url=? AND resolved_at IS NULL",
+        (url,),
+    ).fetchone()
+    if not row:
+        return jsonify({"error": "No pending conflict found for this job"}), 404
+
+    import json as _json
+    matches = _json.loads(row[0]) if row[0] else []
+    if not matches:
+        return jsonify({"error": "No matches to auto-select from"}), 400
+
+    # Use the top match (most specific)
+    top_resume_id = matches[0]["resume_id"]
+    resolve_conflict(conn, url, top_resume_id)
+
+    return jsonify({
+        "status": "resolved",
+        "url": url,
+        "chosen_resume_id": top_resume_id,
+        "method": "auto_specificity",
+    })
+
+
+@app.route("/api/resume-queue/resolve-all", methods=["POST"])
+def api_resume_queue_resolve_all():
+    """Resolve all pending conflicts using recommendations or top specificity match.
+
+    Respects confidence threshold if auto-send is enabled. Conflicts below
+    the threshold will be skipped when using 'recommendation' method.
+    """
+    data = request.get_json() or {}
+    method = data.get("method", "recommendation")  # "recommendation" or "specificity"
+    force = data.get("force", False)  # bypass confidence threshold
+
+    conn = get_connection()
+    pending = get_pending_conflicts(conn)
+    resolved_count = 0
+    skipped_count = 0
+
+    for conflict in pending:
+        url = conflict["url"]
+        matches = conflict["matches"]
+        if not matches:
+            continue
+
+        if method == "recommendation" and conflict["recommendation_id"]:
+            confidence = conflict["recommendation_confidence"]
+
+            # Check confidence threshold unless forced
+            if not force:
+                settings = get_learning_settings()
+                threshold = settings["confidence_threshold"]
+                if confidence < threshold:
+                    skipped_count += 1
+                    continue
+
+            chosen = conflict["recommendation_id"]
+        else:
+            chosen = matches[0]["resume_id"]  # top specificity
+
+        resolve_conflict(conn, url, chosen)
+        resolved_count += 1
+
+    return jsonify({
+        "status": "resolved_all",
+        "method": method,
+        "resolved_count": resolved_count,
+        "skipped_count": skipped_count,
+    })
+
+
+@app.route("/api/resume-recommendation")
+def api_resume_recommendation():
+    """Get a resume recommendation for a given job title."""
+    job_title = request.args.get("job_title", "")
+    if not job_title:
+        return jsonify({"error": "job_title parameter required"}), 400
+
+    conn = get_connection()
+    rec_id, confidence = get_recommendation(conn, job_title)
+
+    return jsonify({
+        "job_title": job_title,
+        "recommendation_id": rec_id,
+        "confidence": confidence,
+    })
+
+
+@app.route("/api/learning-settings", methods=["GET"])
+def api_learning_settings_get():
+    """Get learning system settings."""
+    settings = get_learning_settings()
+    return jsonify(settings)
+
+
+@app.route("/api/learning-settings", methods=["POST"])
+def api_learning_settings_set():
+    """Update learning system settings."""
+    data = request.get_json() or {}
+    auto_send = data.get("auto_send_enabled")
+    threshold = data.get("confidence_threshold")
+
+    try:
+        set_learning_settings(
+            auto_send_enabled=auto_send,
+            confidence_threshold=threshold,
+        )
+        settings = get_learning_settings()
+        return jsonify({
+            "status": "saved",
+            "settings": settings,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/env", methods=["GET"])
 def api_env_get():
     """Get .env configuration (masked keys)."""
@@ -319,24 +752,80 @@ def api_env_save():
 
 @app.route("/api/searches", methods=["GET"])
 def api_searches_get():
-    """Get search configuration."""
+    """Get search configuration as raw YAML or structured JSON."""
     try:
-        if SEARCH_CONFIG_PATH.exists():
-            content = SEARCH_CONFIG_PATH.read_text(encoding="utf-8")
-            return jsonify({"exists": True, "content": content})
-        return jsonify({"exists": False})
+        fmt = request.args.get("format", "raw")
+        if not SEARCH_CONFIG_PATH.exists():
+            if fmt == "json":
+                return jsonify({"exists": False, "data": {
+                    "queries": [], "locations": [], "location": {"accept_patterns": [], "reject_patterns": []},
+                    "country": "USA", "boards": ["indeed", "linkedin", "glassdoor", "zip_recruiter", "google"],
+                    "defaults": {"results_per_site": 100, "hours_old": 72, "days_old": 3},
+                    "exclusions": {"titles": [], "experience": [], "description": [], "salary": []},
+                    "global_remote_locations": [],
+                }})
+            return jsonify({"exists": False})
+
+        content = SEARCH_CONFIG_PATH.read_text(encoding="utf-8")
+        if fmt == "json":
+            import yaml
+            data = yaml.safe_load(content) or {}
+            # Normalise for the form
+            data.setdefault("queries", [])
+            data.setdefault("locations", [])
+            data.setdefault("location", {})
+            data["location"].setdefault("accept_patterns", [])
+            data["location"].setdefault("reject_patterns", [])
+            data.setdefault("country", "USA")
+            data.setdefault("boards", ["indeed", "linkedin", "glassdoor", "zip_recruiter", "google"])
+
+            # Handle defaults: convert hours_old to days_old if needed
+            defaults = data.setdefault("defaults", {})
+            if "hours_old" in defaults and "days_old" not in defaults:
+                defaults["days_old"] = max(1, defaults["hours_old"] // 24)
+            defaults.setdefault("results_per_site", 100)
+            defaults.setdefault("hours_old", defaults.get("days_old", 3) * 24)
+
+            # Handle old exclude_titles field -> new exclusions format
+            if "exclude_titles" in data and "exclusions" not in data:
+                data["exclusions"] = {
+                    "titles": data.pop("exclude_titles", []),
+                    "experience": [],
+                    "description": [],
+                    "salary": [],
+                }
+            else:
+                data.setdefault("exclusions", {"titles": [], "experience": [], "description": [], "salary": []})
+
+            # Add global_remote_locations if not present
+            data.setdefault("global_remote_locations", [])
+
+            return jsonify({"exists": True, "data": data})
+        return jsonify({"exists": True, "content": content})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/searches", methods=["POST"])
 def api_searches_save():
-    """Save search configuration."""
+    """Save search configuration from raw YAML or structured JSON."""
     try:
         data = request.get_json(force=True)
-        content = data.get("content", "")
         ensure_dirs()
-        SEARCH_CONFIG_PATH.write_text(content, encoding="utf-8")
+
+        if "content" in data:
+            # Raw YAML mode
+            SEARCH_CONFIG_PATH.write_text(data["content"], encoding="utf-8")
+        elif "data" in data:
+            # Structured JSON mode — convert to YAML
+            import yaml
+            SEARCH_CONFIG_PATH.write_text(
+                yaml.dump(data["data"], default_flow_style=False, sort_keys=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+        else:
+            return jsonify({"error": "Provide 'content' (YAML) or 'data' (JSON)"}), 400
+
         return jsonify({"status": "saved"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

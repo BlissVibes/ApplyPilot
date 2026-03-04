@@ -67,7 +67,21 @@ tr:hover td { background:rgba(108,138,255,.04); }
 .btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
 .btn-secondary:hover { background:var(--border); }
 .btn-danger { background:var(--red); color:#fff; }
-.btn-sm { padding:5px 10px; font-size:12px; }
+.btn-sm { padding:5px 10px; font-size:12px; background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+.btn-sm:hover { background:var(--border); }
+
+/* Tag list for pattern/filter items */
+.tag-list { display:flex; flex-wrap:wrap; gap:6px; min-height:28px; }
+.tag-item { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:14px; font-size:12px; color:var(--text); }
+.tag-item .tag-remove { cursor:pointer; color:var(--text-dim); font-size:14px; line-height:1; margin-left:2px; }
+.tag-item .tag-remove:hover { color:var(--red); }
+
+/* Query/location row */
+.search-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.search-row input[type="text"] { flex:1; }
+.search-row select { width:auto; min-width:80px; }
+.search-row .row-remove { cursor:pointer; color:var(--text-dim); font-size:18px; padding:4px 8px; border-radius:4px; }
+.search-row .row-remove:hover { color:var(--red); background:rgba(248,113,113,.1); }
 
 /* Forms */
 .form-group { margin-bottom:14px; }
@@ -166,6 +180,10 @@ textarea { min-height:100px; resize:vertical; }
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
       Jobs
     </a>
+    <a href="#review" onclick="showPage('review')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      Review Queue <span id="queue-badge" style="background:var(--yellow);color:var(--bg);padding:1px 6px;border-radius:10px;font-size:10px;font-weight:bold;margin-left:4px;display:none;">0</span>
+    </a>
     <a href="#pipeline" onclick="showPage('pipeline')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
       Pipeline
@@ -208,6 +226,7 @@ textarea { min-height:100px; resize:vertical; }
 
     <div class="tabs">
       <div class="tab active" onclick="showSetupTab('resume')">Resume Upload</div>
+      <div class="tab" onclick="showSetupTab('resumes')">Manage Resumes</div>
       <div class="tab" onclick="showSetupTab('apikeys')">API Keys</div>
       <div class="tab" onclick="showSetupTab('profile')">Profile</div>
       <div class="tab" onclick="showSetupTab('doctor')">Doctor</div>
@@ -225,6 +244,44 @@ textarea { min-height:100px; resize:vertical; }
       </div>
       <div id="resume-status" style="margin-top:12px;"></div>
       <div id="current-resume" style="margin-top:16px;"></div>
+    </div>
+
+    <!-- Manage Resumes -->
+    <div id="setup-resumes" class="setup-tab" style="display:none;">
+      <h2>Manage Multiple Resumes</h2>
+      <p style="color:var(--text-dim);margin-bottom:16px;">Upload and manage multiple resume versions for different job types. Set a default and optionally assign specific resumes to jobs.</p>
+
+      <!-- Resume Upload -->
+      <div style="margin-bottom:24px;">
+        <h3 style="margin-top:0;">Add New Resume</h3>
+        <div style="max-width:500px;">
+          <div class="form-group">
+            <label>Resume Name</label>
+            <input type="text" id="new-resume-name" placeholder="e.g., 'Python Tech Lead'">
+          </div>
+          <div class="form-group">
+            <label>Description (optional)</label>
+            <input type="text" id="new-resume-desc" placeholder="e.g., 'For backend/leadership roles'">
+          </div>
+          <div class="form-group">
+            <label>Tags (comma-separated, optional)</label>
+            <input type="text" id="new-resume-tags" placeholder="e.g., python,backend,leadership">
+          </div>
+          <div class="upload-area" id="upload-area-multi" onclick="document.getElementById('resume-file-multi').click()" style="margin:12px 0;">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p>Drop resume here or click to browse</p>
+            <p style="font-size:12px;">.txt or .pdf files accepted</p>
+            <input type="file" id="resume-file-multi" accept=".txt,.pdf" onchange="uploadResumeMulti(this)">
+          </div>
+        </div>
+        <div id="multi-resume-status" style="margin-top:12px;"></div>
+      </div>
+
+      <!-- Available Resumes List -->
+      <div style="margin-bottom:24px;">
+        <h3>Available Resumes</h3>
+        <div id="resumes-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;"></div>
+      </div>
     </div>
 
     <!-- API Keys -->
@@ -305,6 +362,26 @@ textarea { min-height:100px; resize:vertical; }
     <div id="jobs-table" class="table-wrap"></div>
   </div>
 
+  <!-- Review Queue Page -->
+  <div id="page-review" class="page">
+    <h1>Resume Review Queue</h1>
+    <p style="color:var(--text-dim);margin-bottom:16px;font-size:13px;">
+      Jobs where multiple resumes match. Pick the right resume for each job &mdash; the system learns from your choices to make better recommendations.
+    </p>
+
+    <div id="queue-stats" class="cards" style="margin-bottom:20px;"></div>
+
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <button class="btn btn-primary" onclick="resolveAllConflicts('recommendation')">Accept All Recommendations</button>
+      <button class="btn btn-secondary" onclick="resolveAllConflicts('specificity')">Accept All (Top Specificity)</button>
+    </div>
+
+    <div id="queue-pending"></div>
+
+    <h2 style="margin-top:32px;">Recently Resolved</h2>
+    <div id="queue-history"></div>
+  </div>
+
   <!-- Pipeline Page -->
   <div id="page-pipeline" class="page">
     <h1>Pipeline</h1>
@@ -360,13 +437,268 @@ textarea { min-height:100px; resize:vertical; }
     <h1>Settings</h1>
     <div class="tabs">
       <div class="tab active" onclick="showSettingsTab('searches')">Search Config</div>
+      <div class="tab" onclick="showSettingsTab('learning')">Learning</div>
       <div class="tab" onclick="showSettingsTab('env')">Environment</div>
     </div>
     <div id="settings-searches" class="settings-tab">
-      <h2>Search Configuration (searches.yaml)</h2>
-      <p style="color:var(--text-dim);margin-bottom:12px;">Define your job search queries, locations, and filters.</p>
-      <textarea id="searches-editor" style="min-height:300px;font-family:monospace;font-size:12px;"></textarea>
-      <button class="btn btn-primary" onclick="saveSearches()" style="margin-top:8px;">Save</button>
+      <h2>Search Configuration</h2>
+      <p style="color:var(--text-dim);margin-bottom:16px;">Define your job search queries, locations, and filters.</p>
+
+      <!-- Mode toggle -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button class="btn btn-sm" id="btn-form-mode" onclick="setSearchMode('form')" style="opacity:1;">Form Editor</button>
+        <button class="btn btn-sm" id="btn-yaml-mode" onclick="setSearchMode('yaml')" style="opacity:.5;">Raw YAML</button>
+      </div>
+
+      <!-- ═══ FORM MODE ═══ -->
+      <div id="search-form-mode">
+
+        <!-- Queries -->
+        <div class="card" style="margin-bottom:16px;padding:16px;">
+          <h3 style="margin-bottom:8px;">Job Search Queries</h3>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Tier 1 = high priority, Tier 2 = broader, Tier 3 = wide net</p>
+          <div id="queries-list"></div>
+          <button class="btn btn-sm" onclick="addQuery()" style="margin-top:8px;">+ Add Query</button>
+        </div>
+
+        <!-- Search Locations -->
+        <div class="card" style="margin-bottom:16px;padding:16px;">
+          <h3 style="margin-bottom:8px;">Search Locations</h3>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Add locations with optional search radius (0 = remote-only)</p>
+          <div id="locations-list"></div>
+          <button class="btn btn-sm" onclick="addLocation()" style="margin-top:8px;">+ Add Location</button>
+        </div>
+
+        <!-- Remote Locations (Global Locations) -->
+        <div class="card" style="margin-bottom:16px;padding:16px;">
+          <h3 style="margin-bottom:8px;">Global Remote Locations (Special Forces)</h3>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Search for remote jobs worldwide across continents. Build your remote job task force!</p>
+
+          <div style="margin-bottom:16px;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;margin-bottom:8px;">
+              <input type="checkbox" id="global-remote-enable" onchange="toggleGlobalRemote()">
+              <strong>Enable Global Remote Search</strong>
+            </label>
+          </div>
+
+          <div id="global-remote-panel" style="display:none;background:rgba(108,138,255,.05);padding:12px;border-radius:6px;border:1px solid var(--border);">
+            <!-- Continents -->
+            <div style="margin-bottom:16px;">
+              <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;" id="continent-buttons">
+                <button class="btn btn-sm" id="cb-north-america" onclick="toggleContinent('north-america')">🌎 North America</button>
+                <button class="btn btn-sm" id="cb-central-america" onclick="toggleContinent('central-america')">🌎 Central America</button>
+                <button class="btn btn-sm" id="cb-caribbean" onclick="toggleContinent('caribbean')">🏝️ Caribbean</button>
+                <button class="btn btn-sm" id="cb-south-america" onclick="toggleContinent('south-america')">🌎 South America</button>
+                <button class="btn btn-sm" id="cb-europe-north" onclick="toggleContinent('europe-north')">🌍 Europe (N)</button>
+                <button class="btn btn-sm" id="cb-europe-east" onclick="toggleContinent('europe-east')">🌍 Europe (E)</button>
+                <button class="btn btn-sm" id="cb-europe-south" onclick="toggleContinent('europe-south')">🌍 Europe (S)</button>
+                <button class="btn btn-sm" id="cb-europe-west" onclick="toggleContinent('europe-west')">🌍 Europe (W)</button>
+                <button class="btn btn-sm" id="cb-africa-north" onclick="toggleContinent('africa-north')">🌍 Africa (N)</button>
+                <button class="btn btn-sm" id="cb-africa-west" onclick="toggleContinent('africa-west')">🌍 Africa (W)</button>
+                <button class="btn btn-sm" id="cb-africa-east" onclick="toggleContinent('africa-east')">🌍 Africa (E)</button>
+                <button class="btn btn-sm" id="cb-africa-central" onclick="toggleContinent('africa-central')">🌍 Africa (C)</button>
+                <button class="btn btn-sm" id="cb-africa-south" onclick="toggleContinent('africa-south')">🌍 Africa (S)</button>
+                <button class="btn btn-sm" id="cb-asia-central" onclick="toggleContinent('asia-central')">🌏 Asia (C)</button>
+                <button class="btn btn-sm" id="cb-asia-east" onclick="toggleContinent('asia-east')">🌏 Asia (E)</button>
+                <button class="btn btn-sm" id="cb-asia-south" onclick="toggleContinent('asia-south')">🌏 Asia (S)</button>
+                <button class="btn btn-sm" id="cb-asia-southeast" onclick="toggleContinent('asia-southeast')">🌏 Asia (SE)</button>
+                <button class="btn btn-sm" id="cb-middle-east" onclick="toggleContinent('middle-east')">🕌 Middle East</button>
+                <button class="btn btn-sm" id="cb-oceania" onclick="toggleContinent('oceania')">🌏 Oceania</button>
+              </div>
+            </div>
+
+            <!-- Countries/Regions -->
+            <div id="global-countries-panel" style="display:none;border:1px solid var(--border);border-radius:6px;background:var(--surface2);">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface);border-radius:6px 6px 0 0;">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;">
+                  <input type="checkbox" id="select-all-countries" onchange="selectAllCountries(this.checked)">
+                  Select All
+                </label>
+                <span id="region-country-count" style="font-size:11px;color:var(--text-dim);"></span>
+              </div>
+              <div style="max-height:360px;overflow-y:auto;padding:12px;">
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;" id="countries-list"></div>
+              </div>
+            </div>
+
+            <!-- Selected locations summary -->
+            <div style="margin-top:12px;">
+              <p style="font-size:12px;color:var(--text-dim);margin-bottom:6px;">Selected: <span id="global-remote-count" style="color:var(--accent);font-weight:bold;">0</span> locations</p>
+              <div id="global-remote-selected" class="tag-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Job Boards -->
+        <div class="card" style="margin-bottom:16px;padding:16px;">
+          <h3 style="margin-bottom:8px;">Job Boards</h3>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Select which boards to search</p>
+          <div id="boards-checkboxes" style="display:flex;flex-wrap:wrap;gap:12px;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="indeed" class="board-cb"> Indeed</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="linkedin" class="board-cb"> LinkedIn</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="glassdoor" class="board-cb"> Glassdoor</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="zip_recruiter" class="board-cb"> ZipRecruiter</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="google" class="board-cb"> Google Jobs</label>
+          </div>
+        </div>
+
+        <!-- Country & Defaults -->
+        <div class="card" style="margin-bottom:16px;padding:16px;">
+          <h3 style="margin-bottom:12px;">Search Defaults</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+            <div class="form-group">
+              <label>Country</label>
+              <select id="search-country" style="width:100%;">
+                <option value="USA">USA</option>
+                <option value="UK">UK</option>
+                <option value="Canada">Canada</option>
+                <option value="Australia">Australia</option>
+                <option value="Germany">Germany</option>
+                <option value="France">France</option>
+                <option value="India">India</option>
+                <option value="Netherlands">Netherlands</option>
+                <option value="Ireland">Ireland</option>
+                <option value="Singapore">Singapore</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Results per site</label>
+              <input type="number" id="search-results-per-site" value="100" min="1" max="500" style="width:100%;">
+            </div>
+            <div class="form-group">
+              <label>Max job age (days)</label>
+              <input type="number" id="search-days-old" value="3" min="1" max="30" style="width:100%;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Location Filters -->
+        <div class="card" style="margin-bottom:16px;padding:16px;">
+          <h3 style="margin-bottom:8px;">Location Filters</h3>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Accept/reject jobs based on location text</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div>
+              <label style="font-size:12px;text-transform:uppercase;color:var(--green);margin-bottom:6px;display:block;">Accept Patterns</label>
+              <div id="accept-patterns-list" class="tag-list"></div>
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <input type="text" id="accept-pattern-input" placeholder="e.g. Remote, San Francisco" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addPattern('accept')}">
+                <button class="btn btn-sm" onclick="addPattern('accept')">Add</button>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:12px;text-transform:uppercase;color:var(--red);margin-bottom:6px;display:block;">Reject Patterns</label>
+              <div id="reject-patterns-list" class="tag-list"></div>
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <input type="text" id="reject-pattern-input" placeholder="e.g. London, UK" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addPattern('reject')}">
+                <button class="btn btn-sm" onclick="addPattern('reject')">Add</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Exclusions -->
+        <div class="card" style="margin-bottom:16px;padding:16px;">
+          <h3 style="margin-bottom:12px;">Job Exclusions</h3>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Skip jobs matching these criteria (case-insensitive)</p>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div>
+              <label style="font-size:12px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;display:block;">Job Title Keywords</label>
+              <div id="exclude-titles-list" class="tag-list"></div>
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <input type="text" id="exclude-title-input" placeholder="e.g. intern, VP, director" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addExclusion('title')}">
+                <button class="btn btn-sm" onclick="addExclusion('title')">Add</button>
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size:12px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;display:block;">Experience Keywords</label>
+              <div id="exclude-experience-list" class="tag-list"></div>
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <input type="text" id="exclude-experience-input" placeholder="e.g. 10+ years, manager" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addExclusion('experience')}">
+                <button class="btn btn-sm" onclick="addExclusion('experience')">Add</button>
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size:12px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;display:block;">Description Keywords</label>
+              <div id="exclude-description-list" class="tag-list"></div>
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <input type="text" id="exclude-description-input" placeholder="e.g. on-site only, clearance required" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addExclusion('description')}">
+                <button class="btn btn-sm" onclick="addExclusion('description')">Add</button>
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size:12px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;display:block;">Salary/Pay Requirements</label>
+              <div id="exclude-salary-list" class="tag-list"></div>
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <input type="text" id="exclude-salary-input" placeholder="e.g. $50k-$70k, unpaid" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addExclusion('salary')}">
+                <button class="btn btn-sm" onclick="addExclusion('salary')">Add</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" onclick="saveSearchesForm()" style="margin-top:4px;">Save Configuration</button>
+      </div>
+
+      <!-- ═══ YAML MODE ═══ -->
+      <div id="search-yaml-mode" style="display:none;">
+        <textarea id="searches-editor" style="min-height:300px;font-family:monospace;font-size:12px;"></textarea>
+        <button class="btn btn-primary" onclick="saveSearches()" style="margin-top:8px;">Save</button>
+      </div>
+    </div>
+    <div id="settings-learning" class="settings-tab" style="display:none;">
+      <h2>Learning System Settings</h2>
+      <p style="color:var(--text-dim);margin-bottom:16px;font-size:13px;">
+        Control how the system learns from your manual resume selections and when to auto-send resumes based on learned recommendations.
+      </p>
+      <div class="card" style="padding:16px;">
+        <h3 style="margin:0 0 16px 0;">Auto-Send Recommendations</h3>
+
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+            <input type="checkbox" id="learning-auto-send" onchange="toggleAutoSend()" style="width:auto;">
+            <strong>Enable auto-resolution of conflicts when confidence is high enough</strong>
+          </label>
+          <p style="margin:8px 0 0 0;font-size:11px;color:var(--text-dim);margin-left:24px;">
+            When enabled, the system will automatically resolve resume conflicts with recommendations that meet your confidence threshold.
+          </p>
+        </div>
+
+        <div class="form-group" style="margin-top:16px;">
+          <label style="display:block;margin-bottom:8px;">
+            <strong>Confidence Threshold: <span id="learning-threshold-display">90%</span></strong>
+          </label>
+          <p style="margin:0 0 12px 0;font-size:11px;color:var(--text-dim);">
+            Only auto-send if the recommendation confidence is at or above this threshold.
+          </p>
+          <input type="range" id="learning-threshold" min="0" max="100" value="90" step="5"
+                 style="width:100%;height:6px;border-radius:3px;background:var(--surface2);outline:none;-webkit-appearance:none;appearance:none;"
+                 onchange="updateThresholdDisplay()"
+                 oninput="updateThresholdDisplay()">
+          <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--text-dim);">
+            <span>0%</span>
+            <span>50%</span>
+            <span>100%</span>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" onclick="saveLearningSettings()" style="margin-top:16px;">Save Settings</button>
+
+        <div id="learning-status" style="margin-top:12px;padding:8px;border-radius:4px;display:none;"></div>
+      </div>
+
+      <div class="card" style="padding:16px;margin-top:16px;">
+        <h3 style="margin:0 0 8px 0;">Learning System Info</h3>
+        <p style="color:var(--text-dim);font-size:12px;margin:0;">
+          The system learns from your manual resume selections when conflicts are resolved.
+          Each time you pick a resume for a conflicting job, it records that choice.
+          Future jobs with similar titles will get a recommendation based on these selections,
+          with a confidence score showing how many similar past jobs used that resume.
+        </p>
+      </div>
     </div>
     <div id="settings-env" class="settings-tab" style="display:none;">
       <h2>Environment Variables</h2>
@@ -409,6 +741,7 @@ function showPage(name) {
   if (name === 'dashboard') loadDashboard();
   if (name === 'jobs') loadJobs();
   if (name === 'setup') { loadResumeStatus(); loadEnvDisplay(); loadProfile(); }
+  if (name === 'review') loadReviewQueue();
   if (name === 'pipeline') pollPipelineStatus();
   if (name === 'files') loadFiles();
   if (name === 'settings') loadSearches();
@@ -422,6 +755,7 @@ function showSetupTab(name) {
   if (name === 'doctor') loadDoctor();
   if (name === 'apikeys') loadEnvKeys();
   if (name === 'profile') loadProfile();
+  if (name === 'resumes') loadResumesList();
 }
 
 function showFilesTab(name) {
@@ -437,6 +771,7 @@ function showSettingsTab(name) {
   document.querySelectorAll('#page-settings .tab').forEach(t => t.classList.remove('active'));
   event.target.classList.add('active');
   if (name === 'env') loadEnvDisplay();
+  if (name === 'learning') loadLearningSettings();
 }
 
 // ── Toast ───────────────────────────────────────────────────────────
@@ -475,6 +810,7 @@ async function loadDashboard() {
     <div class="card"><div class="label">Ready to Apply</div><div class="value yellow">${stats.ready_to_apply}</div></div>
     <div class="card"><div class="label">Applied</div><div class="value green">${stats.applied}</div></div>
     <div class="card"><div class="label">Errors</div><div class="value red">${stats.apply_errors}</div></div>
+    ${stats.resume_conflicts_pending > 0 ? `<div class="card" style="cursor:pointer;" onclick="showPage('review')"><div class="label">Resume Conflicts</div><div class="value yellow">${stats.resume_conflicts_pending}</div></div>` : ''}
   `;
 
   // Score chart
@@ -593,14 +929,287 @@ async function showJobDetail(url) {
     ${job.cover_letter_path ? `<div style="margin-bottom:8px;"><strong>Cover Letter:</strong> <button class="btn btn-secondary btn-sm" onclick="viewFile('${esc(job.cover_letter_path)}')">View</button></div>` : ''}
     ${job.apply_status ? `<div style="margin-bottom:8px;"><strong>Apply Status:</strong> ${esc(job.apply_status)}</div>` : ''}
     ${job.apply_error ? `<div style="margin-bottom:8px;color:var(--red);"><strong>Apply Error:</strong> ${esc(job.apply_error)}</div>` : ''}
+    <div id="job-resume-selector-${esc(url.replace(/[^a-z0-9]/gi, '_'))}" style="margin-bottom:16px;"></div>
     <h3>Description</h3>
     <pre style="white-space:pre-wrap;font-size:12px;max-height:300px;overflow-y:auto;background:var(--surface2);padding:12px;border-radius:6px;">${esc(job.full_description || job.description || 'No description available')}</pre>
   `;
 
+  // Load resume selector after modal is shown
+  loadJobResumeSelector(url);
   document.getElementById('job-modal').classList.add('show');
 }
 
 function closeJobModal() { document.getElementById('job-modal').classList.remove('show'); }
+
+async function loadJobResumeSelector(url) {
+  const jobResume = await api('/api/job/' + encodeURIComponent(url) + '/resume');
+  const resumesData = await api('/api/resumes');
+  const jobData = await api('/api/job/' + encodeURIComponent(url));
+  const matchesData = await api('/api/job/' + encodeURIComponent(url) + '/resume-matches');
+
+  const selectorId = 'job-resume-selector-' + url.replace(/[^a-z0-9]/gi, '_');
+  const div = document.getElementById(selectorId);
+
+  if (!div || !resumesData.resumes) return;
+
+  const currentResume = jobResume.resume_id || 'default';
+  const isOverride = jobResume.selection_method === 'override';
+  const jobTitle = (jobData.title || '').toLowerCase();
+  const matches = matchesData.matches || [];
+
+  // Determine reason for current selection
+  let reason = 'Using default resume';
+  let reasonColor = 'var(--text-dim)';
+  let conflictInfo = '';
+
+  if (isOverride) {
+    reason = 'Manually overridden for this job';
+    reasonColor = 'var(--accent)';
+  } else if (matches.length > 0) {
+    const primaryMatch = matches[0];
+    reason = `Auto-matched to "${primaryMatch.name}" (keyword: "${primaryMatch.matched_keyword}")`;
+    reasonColor = 'var(--green)';
+
+    // Show conflict warning if multiple resumes match
+    if (matches.length > 1) {
+      const otherMatches = matches.slice(1).map(m => `"${m.name}" (${m.matched_keyword})`).join(', ');
+      conflictInfo = `⚠️ Also matches: ${otherMatches}. Using "${primaryMatch.name}" because "${primaryMatch.matched_keyword}" is more specific.`;
+    }
+  }
+
+  let html = `
+    <div style="background:var(--surface2);padding:12px;border-radius:6px;border:1px solid var(--border);">
+      <strong style="display:block;margin-bottom:8px;">Resume for This Job</strong>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="resume-select-${esc(url.replace(/[^a-z0-9]/gi, '_'))}" style="flex:1;">
+  `;
+
+  // Add auto option
+  html += `<option value="auto">Use Default</option>`;
+
+  // Add all resumes with indication of which have matching keywords
+  resumesData.resumes.forEach(resume => {
+    const selected = currentResume === resume.id ? 'selected' : '';
+    let resumeLabel = esc(resume.name);
+
+    // Check if this resume matches the job title
+    if (resume.job_title_keywords && resume.job_title_keywords.length) {
+      for (const keyword of resume.job_title_keywords) {
+        if (jobTitle.includes(keyword.toLowerCase())) {
+          resumeLabel += ` ✓ (${keyword})`;
+          break;
+        }
+      }
+    }
+
+    html += `<option value="${esc(resume.id)}" ${selected}>${resumeLabel}</option>`;
+  });
+
+  html += `
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="setJobResume('${esc(url)}')">Apply</button>
+      </div>
+      <p style="margin:8px 0 0 0;font-size:11px;color:${reasonColor};">
+        ${reason}
+      </p>
+      ${conflictInfo ? `<p style="margin:6px 0 0 0;font-size:11px;color:var(--yellow);background:var(--surface);padding:8px;border-radius:4px;border-left:2px solid var(--yellow);">${conflictInfo}</p>` : ''}
+    </div>
+  `;
+
+  div.innerHTML = html;
+}
+
+async function setJobResume(url) {
+  const selectorId = 'resume-select-' + url.replace(/[^a-z0-9]/gi, '_');
+  const select = document.getElementById(selectorId);
+  if (!select) return;
+
+  const resumeId = select.value;
+  if (resumeId === 'auto') {
+    // Reset to default (remove override)
+    // We need an endpoint to reset, for now just use the set endpoint with 'default'
+    const r = await fetch('/api/job/' + encodeURIComponent(url) + '/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume_id: 'default' })
+    });
+    const data = await r.json();
+    if (data.error) {
+      toast(data.error, 'err');
+    } else {
+      toast('Resume reset to default');
+      loadJobResumeSelector(url);
+    }
+  } else {
+    const r = await fetch('/api/job/' + encodeURIComponent(url) + '/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume_id: resumeId })
+    });
+    const data = await r.json();
+    if (data.error) {
+      toast(data.error, 'err');
+    } else {
+      toast(`Assigned ${resumeId} to this job`);
+      loadJobResumeSelector(url);
+    }
+  }
+}
+
+// ── Review Queue (Conflict Resolution) ──────────────────────────────
+
+async function loadReviewQueue() {
+  const [queueData, historyData, statsData] = await Promise.all([
+    api('/api/resume-queue'),
+    api('/api/resume-queue/history?limit=20'),
+    api('/api/stats'),
+  ]);
+
+  // Update badge
+  updateQueueBadge(queueData.count || 0);
+
+  // Stats cards
+  const statsDiv = document.getElementById('queue-stats');
+  const pending = queueData.count || 0;
+  const resolved = statsData.resume_conflicts_resolved || 0;
+  statsDiv.innerHTML = `
+    <div class="card"><div class="label">Pending Review</div><div class="value ${pending > 0 ? 'yellow' : 'green'}">${pending}</div></div>
+    <div class="card"><div class="label">Resolved</div><div class="value green">${resolved}</div></div>
+    <div class="card"><div class="label">Learning Data</div><div class="value accent">${resolved} selections</div></div>
+  `;
+
+  // Pending conflicts
+  const pendingDiv = document.getElementById('queue-pending');
+  const conflicts = queueData.pending || [];
+
+  if (conflicts.length === 0) {
+    pendingDiv.innerHTML = '<div class="card" style="padding:24px;text-align:center;"><p style="color:var(--text-dim);">No resume conflicts to review. All clear!</p></div>';
+  } else {
+    pendingDiv.innerHTML = conflicts.map(conflict => renderConflictCard(conflict)).join('');
+  }
+
+  // History
+  const historyDiv = document.getElementById('queue-history');
+  const history = historyData.resolved || [];
+  if (history.length === 0) {
+    historyDiv.innerHTML = '<p style="color:var(--text-dim);font-size:13px;">No resolved conflicts yet.</p>';
+  } else {
+    historyDiv.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Job Title</th><th>Chosen Resume</th><th>Resolved</th></tr></thead><tbody>' +
+      history.map(h => `<tr>
+        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(h.job_title)}">${esc(h.job_title || '(untitled)')}</td>
+        <td><span style="color:var(--green);">${esc(h.chosen_resume_id)}</span></td>
+        <td style="color:var(--text-dim);font-size:12px;">${new Date(h.resolved_at).toLocaleString()}</td>
+      </tr>`).join('') +
+      '</tbody></table></div>';
+  }
+}
+
+function renderConflictCard(conflict) {
+  const matches = conflict.matches || [];
+  const recId = conflict.recommendation_id;
+  const recConf = conflict.recommendation_confidence || 0;
+  const safeUrl = esc(conflict.url);
+
+  let matchesHtml = matches.map(m => {
+    const isRec = recId === m.resume_id;
+    const recBadge = isRec ? `<span style="background:var(--accent);color:white;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:4px;">Recommended (${Math.round(recConf * 100)}%)</span>` : '';
+    return `
+      <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--surface);border-radius:4px;border:1px solid var(--border);">
+        <div style="flex:1;">
+          <strong>${esc(m.name || m.resume_id)}</strong>
+          <span style="color:var(--text-dim);font-size:11px;margin-left:8px;">keyword: "${esc(m.matched_keyword)}" (${m.keyword_length} chars)</span>
+          ${recBadge}
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="resolveConflict('${safeUrl}', '${esc(m.resume_id)}')">Select</button>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">
+        <div>
+          <h3 style="margin:0 0 4px 0;color:var(--text);">${esc(conflict.job_title || '(untitled)')}</h3>
+          <p style="margin:0;font-size:11px;color:var(--text-dim);">
+            ${conflict.match_count} resumes match &bull;
+            Queued ${new Date(conflict.queued_at).toLocaleString()}
+          </p>
+        </div>
+        <button class="btn btn-sm btn-secondary" onclick="skipConflict('${safeUrl}')">Use Top Match</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${matchesHtml}
+      </div>
+    </div>
+  `;
+}
+
+async function resolveConflict(url, resumeId) {
+  const r = await fetch('/api/resume-queue/' + encodeURIComponent(url) + '/resolve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ resume_id: resumeId }),
+  });
+  const data = await r.json();
+  if (data.error) {
+    toast(data.error, 'err');
+  } else {
+    toast(`Selected "${resumeId}" for this job`);
+    loadReviewQueue();
+  }
+}
+
+async function skipConflict(url) {
+  const r = await fetch('/api/resume-queue/' + encodeURIComponent(url) + '/skip', {
+    method: 'POST',
+  });
+  const data = await r.json();
+  if (data.error) {
+    toast(data.error, 'err');
+  } else {
+    toast(`Auto-selected "${data.chosen_resume_id}"`);
+    loadReviewQueue();
+  }
+}
+
+async function resolveAllConflicts(method) {
+  const queueData = await api('/api/resume-queue');
+  const count = queueData.count || 0;
+  if (count === 0) { toast('No conflicts to resolve'); return; }
+
+  if (!confirm(`Resolve all ${count} conflicts using ${method === 'recommendation' ? 'learned recommendations' : 'top specificity match'}?`)) return;
+
+  const r = await fetch('/api/resume-queue/resolve-all', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ method }),
+  });
+  const data = await r.json();
+  if (data.error) {
+    toast(data.error, 'err');
+  } else {
+    toast(`Resolved ${data.resolved_count} conflicts`);
+    loadReviewQueue();
+  }
+}
+
+function updateQueueBadge(count) {
+  const badge = document.getElementById('queue-badge');
+  if (badge) {
+    if (count > 0) {
+      badge.textContent = count;
+      badge.style.display = 'inline';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+}
+
+// Update badge on dashboard load too
+async function refreshQueueBadge() {
+  const data = await api('/api/resume-queue');
+  updateQueueBadge(data.count || 0);
+}
 
 // ── Resume Upload ───────────────────────────────────────────────────
 const uploadArea = document.getElementById('upload-area');
@@ -613,6 +1222,20 @@ if (uploadArea) {
     if (e.dataTransfer.files.length) {
       document.getElementById('resume-file').files = e.dataTransfer.files;
       uploadResume(document.getElementById('resume-file'));
+    }
+  });
+}
+
+const uploadAreaMulti = document.getElementById('upload-area-multi');
+if (uploadAreaMulti) {
+  uploadAreaMulti.addEventListener('dragover', e => { e.preventDefault(); uploadAreaMulti.classList.add('dragover'); });
+  uploadAreaMulti.addEventListener('dragleave', () => uploadAreaMulti.classList.remove('dragover'));
+  uploadAreaMulti.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadAreaMulti.classList.remove('dragover');
+    if (e.dataTransfer.files.length) {
+      document.getElementById('resume-file-multi').files = e.dataTransfer.files;
+      uploadResumeMulti(document.getElementById('resume-file-multi'));
     }
   });
 }
@@ -650,6 +1273,242 @@ async function loadResumeStatus() {
     `;
   } else {
     div.innerHTML = '<p style="color:var(--text-dim)">No resume uploaded yet.</p>';
+  }
+}
+
+// ── Multiple Resume Management ────────────────────────────────────────
+
+async function uploadResumeMulti(input) {
+  if (!input.files.length) return;
+  const file = input.files[0];
+  const name = document.getElementById('new-resume-name').value;
+  const desc = document.getElementById('new-resume-desc').value;
+  const tags = document.getElementById('new-resume-tags').value;
+
+  if (!name) {
+    toast('Please enter a resume name', 'err');
+    return;
+  }
+
+  const form = new FormData();
+  form.append('file', file);
+  form.append('resume_name', name);
+  form.append('resume_description', desc);
+  form.append('resume_tags', tags);
+
+  const status = document.getElementById('multi-resume-status');
+  status.innerHTML = '<span style="color:var(--accent)">Uploading...</span>';
+
+  const r = await fetch('/api/resumes', { method: 'POST', body: form });
+  const data = await r.json();
+
+  if (data.error) {
+    status.innerHTML = `<span style="color:var(--red)">${esc(data.error)}</span>`;
+    toast(data.error, 'err');
+  } else {
+    status.innerHTML = `<span style="color:var(--green)">Uploaded: ${esc(data.name)}</span>`;
+    document.getElementById('new-resume-name').value = '';
+    document.getElementById('new-resume-desc').value = '';
+    document.getElementById('new-resume-tags').value = '';
+    toast('Resume added!');
+    loadResumesList();
+  }
+  input.value = '';
+}
+
+async function loadResumesList() {
+  const data = await api('/api/resumes');
+  const list = document.getElementById('resumes-list');
+  list.innerHTML = '';
+
+  if (!data.resumes || data.resumes.length === 0) {
+    list.innerHTML = '<p style="color:var(--text-dim)">No resumes uploaded yet.</p>';
+    return;
+  }
+
+  data.resumes.forEach(resume => {
+    const isDefault = resume.id === data.default_resume_id;
+    const card = document.createElement('div');
+    card.style.cssText = `
+      background:var(--surface2);
+      border:1px solid var(--border);
+      border-radius:8px;
+      padding:16px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    `;
+
+    const tags = (resume.tags || []).join(', ');
+    const resumeId = resume.id;
+    card.innerHTML = `
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
+          <div>
+            <h4 style="margin:0;margin-bottom:4px;">${esc(resume.name)}</h4>
+            <p style="margin:0;font-size:12px;color:var(--text-dim);">${esc(resume.description || 'No description')}</p>
+          </div>
+          ${isDefault ? '<span style="background:var(--accent);color:var(--surface);padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold;">DEFAULT</span>' : ''}
+        </div>
+        ${tags ? `<p style="margin:0;font-size:11px;color:var(--accent);">Tags: ${esc(tags)}</p>` : ''}
+        <p style="margin:0;font-size:11px;color:var(--text-dim);">Created: ${new Date(resume.created_at).toLocaleDateString()}</p>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button class="btn btn-sm btn-secondary" onclick="viewResume('${esc(resumeId)}')">View</button>
+        ${!isDefault ? `<button class="btn btn-sm btn-secondary" onclick="setDefaultResume('${esc(resumeId)}')">Set Default</button>` : ''}
+        <button class="btn btn-sm btn-secondary" onclick="toggleKeywordEditor('${esc(resumeId)}')">Job Titles</button>
+        ${resume.id !== 'default' ? `<button class="btn btn-sm" style="background:var(--red);color:white;" onclick="deleteResume('${esc(resumeId)}')">Delete</button>` : ''}
+      </div>
+      <div id="keywords-editor-${esc(resumeId)}" style="display:none;background:var(--surface);padding:12px;border:1px solid var(--border);border-radius:6px;margin-top:8px;"></div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+async function toggleKeywordEditor(resumeId) {
+  const editor = document.getElementById(`keywords-editor-${esc(resumeId)}`);
+  if (editor.style.display === 'none') {
+    editor.style.display = 'block';
+    await loadKeywordEditor(resumeId);
+  } else {
+    editor.style.display = 'none';
+  }
+}
+
+async function loadKeywordEditor(resumeId) {
+  const data = await api(`/api/resumes/${resumeId}/keywords`);
+  const editor = document.getElementById(`keywords-editor-${esc(resumeId)}`);
+
+  if (data.error) {
+    editor.innerHTML = `<span style="color:var(--red);">${esc(data.error)}</span>`;
+    return;
+  }
+
+  const keywords = data.keywords || [];
+  const keywordString = keywords.join(', ');
+
+  editor.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <label style="font-size:12px;font-weight:bold;">Job Title Keywords</label>
+      <p style="margin:0;font-size:11px;color:var(--text-dim);">Auto-assign this resume to jobs with these keywords in the title. (comma or space-separated)</p>
+      <input type="text" id="keywords-input-${esc(resumeId)}" value="${esc(keywordString)}" placeholder="python, backend, senior" style="padding:8px;border:1px solid var(--border);border-radius:4px;font-size:12px;">
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-sm" onclick="saveKeywords('${esc(resumeId)}')">Save</button>
+        <button class="btn btn-sm btn-secondary" onclick="toggleKeywordEditor('${esc(resumeId)}')">Cancel</button>
+      </div>
+    </div>
+  `;
+}
+
+async function saveKeywords(resumeId) {
+  const input = document.getElementById(`keywords-input-${esc(resumeId)}`);
+  const keywordString = input.value;
+
+  const r = await fetch(`/api/resumes/${resumeId}/keywords`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ keywords: keywordString })
+  });
+
+  const data = await r.json();
+  if (data.error) {
+    toast(data.error, 'err');
+  } else {
+    toast(`Keywords saved for ${resumeId}`);
+    toggleKeywordEditor(resumeId);
+    loadResumesList();
+  }
+}
+
+async function loadResumesList() {
+  const data = await api('/api/resumes');
+  const list = document.getElementById('resumes-list');
+  list.innerHTML = '';
+
+  if (!data.resumes || data.resumes.length === 0) {
+    list.innerHTML = '<p style="color:var(--text-dim)">No resumes uploaded yet.</p>';
+    return;
+  }
+
+  data.resumes.forEach(resume => {
+    const isDefault = resume.id === data.default_resume_id;
+    const card = document.createElement('div');
+    card.style.cssText = `
+      background:var(--surface2);
+      border:1px solid var(--border);
+      border-radius:8px;
+      padding:16px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    `;
+
+    const tags = (resume.tags || []).join(', ');
+    const resumeId = resume.id;
+    card.innerHTML = `
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
+          <div>
+            <h4 style="margin:0;margin-bottom:4px;">${esc(resume.name)}</h4>
+            <p style="margin:0;font-size:12px;color:var(--text-dim);">${esc(resume.description || 'No description')}</p>
+          </div>
+          ${isDefault ? '<span style="background:var(--accent);color:var(--surface);padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold;">DEFAULT</span>' : ''}
+        </div>
+        ${tags ? `<p style="margin:0;font-size:11px;color:var(--accent);">Tags: ${esc(tags)}</p>` : ''}
+        ${resume.job_title_keywords && resume.job_title_keywords.length ? `<p style="margin:0;font-size:11px;color:var(--green);"><strong>Auto-matches:</strong> ${esc(resume.job_title_keywords.join(', '))}</p>` : ''}
+        <p style="margin:0;font-size:11px;color:var(--text-dim);">Created: ${new Date(resume.created_at).toLocaleDateString()}</p>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button class="btn btn-sm btn-secondary" onclick="viewResume('${esc(resumeId)}')">View</button>
+        ${!isDefault ? `<button class="btn btn-sm btn-secondary" onclick="setDefaultResume('${esc(resumeId)}')">Set Default</button>` : ''}
+        <button class="btn btn-sm btn-secondary" onclick="toggleKeywordEditor('${esc(resumeId)}')">Job Titles</button>
+        ${resume.id !== 'default' ? `<button class="btn btn-sm" style="background:var(--red);color:white;" onclick="deleteResume('${esc(resumeId)}')">Delete</button>` : ''}
+      </div>
+      <div id="keywords-editor-${esc(resumeId)}" style="display:none;background:var(--surface);padding:12px;border:1px solid var(--border);border-radius:6px;margin-top:8px;"></div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+async function viewResume(resumeId) {
+  const data = await api(`/api/resumes/${resumeId}`);
+  if (data.error) {
+    toast(data.error, 'err');
+    return;
+  }
+
+  const modal = document.getElementById('modal');
+  const header = document.getElementById('modal-header');
+  const body = document.getElementById('modal-body');
+
+  header.textContent = `${esc(data.info.name)} (${data.length} characters)`;
+  body.innerHTML = `
+    <pre style="background:var(--surface2);padding:12px;border-radius:6px;font-size:12px;max-height:500px;overflow-y:auto;white-space:pre-wrap;">${esc(data.text)}</pre>
+  `;
+  modal.classList.add('show');
+}
+
+async function setDefaultResume(resumeId) {
+  const r = await fetch(`/api/resumes/${resumeId}/set-default`, { method: 'POST' });
+  const data = await r.json();
+  if (data.error) {
+    toast(data.error, 'err');
+  } else {
+    toast(`${resumeId} is now the default resume`);
+    loadResumesList();
+  }
+}
+
+async function deleteResume(resumeId) {
+  if (!confirm(`Delete resume "${resumeId}"?`)) return;
+
+  const r = await fetch(`/api/resumes/${resumeId}`, { method: 'DELETE' });
+  const data = await r.json();
+  if (data.error) {
+    toast(data.error, 'err');
+  } else {
+    toast('Resume deleted');
+    loadResumesList();
   }
 }
 
@@ -988,15 +1847,545 @@ async function loadDoctor() {
   document.getElementById('doctor-results').innerHTML = html;
 }
 
+// ── Global Remote Locations Data (all ~195 countries) ───────────────
+const GLOBAL_LOCATIONS = {
+  'north-america': {
+    name: 'North America',
+    countries: {
+      'USA': { name: 'United States', regions: ['Alabama','Alaska','Arizona','Arkansas','California','Colorado','Connecticut','Delaware','Florida','Georgia','Hawaii','Idaho','Illinois','Indiana','Iowa','Kansas','Kentucky','Louisiana','Maine','Maryland','Massachusetts','Michigan','Minnesota','Mississippi','Missouri','Montana','Nebraska','Nevada','New Hampshire','New Jersey','New Mexico','New York','North Carolina','North Dakota','Ohio','Oklahoma','Oregon','Pennsylvania','Rhode Island','South Carolina','South Dakota','Tennessee','Texas','Utah','Vermont','Virginia','Washington','West Virginia','Wisconsin','Wyoming','Washington DC'] },
+      'Canada': { name: 'Canada', regions: ['Alberta','British Columbia','Manitoba','New Brunswick','Newfoundland and Labrador','Nova Scotia','Ontario','Prince Edward Island','Quebec','Saskatchewan','Northwest Territories','Nunavut','Yukon'] },
+      'Mexico': { name: 'Mexico', regions: null },
+      'Greenland': { name: 'Greenland', regions: null },
+      'Saint Pierre and Miquelon': { name: 'Saint Pierre and Miquelon', regions: null },
+    }
+  },
+  'central-america': {
+    name: 'Central America',
+    countries: {
+      'Belize': { name: 'Belize', regions: null },
+      'Costa Rica': { name: 'Costa Rica', regions: null },
+      'El Salvador': { name: 'El Salvador', regions: null },
+      'Guatemala': { name: 'Guatemala', regions: null },
+      'Honduras': { name: 'Honduras', regions: null },
+      'Nicaragua': { name: 'Nicaragua', regions: null },
+      'Panama': { name: 'Panama', regions: null },
+    }
+  },
+  'caribbean': {
+    name: 'Caribbean',
+    countries: {
+      'Antigua and Barbuda': { name: 'Antigua and Barbuda', regions: null },
+      'Aruba': { name: 'Aruba', regions: null },
+      'Bahamas': { name: 'Bahamas', regions: null },
+      'Barbados': { name: 'Barbados', regions: null },
+      'Bermuda': { name: 'Bermuda', regions: null },
+      'Cayman Islands': { name: 'Cayman Islands', regions: null },
+      'Cuba': { name: 'Cuba', regions: null },
+      'Dominica': { name: 'Dominica', regions: null },
+      'Dominican Republic': { name: 'Dominican Republic', regions: null },
+      'Grenada': { name: 'Grenada', regions: null },
+      'Guadeloupe': { name: 'Guadeloupe', regions: null },
+      'Haiti': { name: 'Haiti', regions: null },
+      'Jamaica': { name: 'Jamaica', regions: null },
+      'Martinique': { name: 'Martinique', regions: null },
+      'Puerto Rico': { name: 'Puerto Rico', regions: null },
+      'Saint Kitts and Nevis': { name: 'Saint Kitts and Nevis', regions: null },
+      'Saint Lucia': { name: 'Saint Lucia', regions: null },
+      'Saint Vincent and the Grenadines': { name: 'Saint Vincent and the Grenadines', regions: null },
+      'Trinidad and Tobago': { name: 'Trinidad and Tobago', regions: null },
+      'Turks and Caicos Islands': { name: 'Turks and Caicos Islands', regions: null },
+      'US Virgin Islands': { name: 'US Virgin Islands', regions: null },
+    }
+  },
+  'south-america': {
+    name: 'South America',
+    countries: {
+      'Argentina': { name: 'Argentina', regions: null },
+      'Bolivia': { name: 'Bolivia', regions: null },
+      'Brazil': { name: 'Brazil', regions: null },
+      'Chile': { name: 'Chile', regions: null },
+      'Colombia': { name: 'Colombia', regions: null },
+      'Ecuador': { name: 'Ecuador', regions: null },
+      'French Guiana': { name: 'French Guiana', regions: null },
+      'Guyana': { name: 'Guyana', regions: null },
+      'Paraguay': { name: 'Paraguay', regions: null },
+      'Peru': { name: 'Peru', regions: null },
+      'Suriname': { name: 'Suriname', regions: null },
+      'Uruguay': { name: 'Uruguay', regions: null },
+      'Venezuela': { name: 'Venezuela', regions: null },
+    }
+  },
+  'europe-north': {
+    name: 'Europe (North)',
+    countries: {
+      'Denmark': { name: 'Denmark', regions: null },
+      'Estonia': { name: 'Estonia', regions: null },
+      'Faroe Islands': { name: 'Faroe Islands', regions: null },
+      'Finland': { name: 'Finland', regions: null },
+      'Iceland': { name: 'Iceland', regions: null },
+      'Latvia': { name: 'Latvia', regions: null },
+      'Lithuania': { name: 'Lithuania', regions: null },
+      'Norway': { name: 'Norway', regions: null },
+      'Sweden': { name: 'Sweden', regions: null },
+    }
+  },
+  'europe-east': {
+    name: 'Europe (East)',
+    countries: {
+      'Armenia': { name: 'Armenia', regions: null },
+      'Azerbaijan': { name: 'Azerbaijan', regions: null },
+      'Belarus': { name: 'Belarus', regions: null },
+      'Bulgaria': { name: 'Bulgaria', regions: null },
+      'Czech Republic': { name: 'Czech Republic', regions: null },
+      'Georgia': { name: 'Georgia', regions: null },
+      'Hungary': { name: 'Hungary', regions: null },
+      'Moldova': { name: 'Moldova', regions: null },
+      'Poland': { name: 'Poland', regions: null },
+      'Romania': { name: 'Romania', regions: null },
+      'Russia': { name: 'Russia', regions: null },
+      'Slovakia': { name: 'Slovakia', regions: null },
+      'Ukraine': { name: 'Ukraine', regions: null },
+    }
+  },
+  'europe-south': {
+    name: 'Europe (South)',
+    countries: {
+      'Albania': { name: 'Albania', regions: null },
+      'Andorra': { name: 'Andorra', regions: null },
+      'Bosnia and Herzegovina': { name: 'Bosnia and Herzegovina', regions: null },
+      'Croatia': { name: 'Croatia', regions: null },
+      'Cyprus': { name: 'Cyprus', regions: null },
+      'Gibraltar': { name: 'Gibraltar', regions: null },
+      'Greece': { name: 'Greece', regions: null },
+      'Italy': { name: 'Italy', regions: null },
+      'Kosovo': { name: 'Kosovo', regions: null },
+      'Malta': { name: 'Malta', regions: null },
+      'Montenegro': { name: 'Montenegro', regions: null },
+      'North Macedonia': { name: 'North Macedonia', regions: null },
+      'Portugal': { name: 'Portugal', regions: null },
+      'San Marino': { name: 'San Marino', regions: null },
+      'Serbia': { name: 'Serbia', regions: null },
+      'Slovenia': { name: 'Slovenia', regions: null },
+      'Spain': { name: 'Spain', regions: null },
+      'Vatican City': { name: 'Vatican City', regions: null },
+    }
+  },
+  'europe-west': {
+    name: 'Europe (West)',
+    countries: {
+      'Austria': { name: 'Austria', regions: null },
+      'Belgium': { name: 'Belgium', regions: null },
+      'France': { name: 'France', regions: null },
+      'Germany': { name: 'Germany', regions: null },
+      'Ireland': { name: 'Ireland', regions: null },
+      'Liechtenstein': { name: 'Liechtenstein', regions: null },
+      'Luxembourg': { name: 'Luxembourg', regions: null },
+      'Monaco': { name: 'Monaco', regions: null },
+      'Netherlands': { name: 'Netherlands', regions: null },
+      'Switzerland': { name: 'Switzerland', regions: null },
+      'United Kingdom': { name: 'United Kingdom', regions: null },
+    }
+  },
+  'africa-north': {
+    name: 'Africa (North)',
+    countries: {
+      'Algeria': { name: 'Algeria', regions: null },
+      'Egypt': { name: 'Egypt', regions: null },
+      'Libya': { name: 'Libya', regions: null },
+      'Mauritania': { name: 'Mauritania', regions: null },
+      'Morocco': { name: 'Morocco', regions: null },
+      'Sudan': { name: 'Sudan', regions: null },
+      'Tunisia': { name: 'Tunisia', regions: null },
+      'Western Sahara': { name: 'Western Sahara', regions: null },
+    }
+  },
+  'africa-west': {
+    name: 'Africa (West)',
+    countries: {
+      'Benin': { name: 'Benin', regions: null },
+      'Burkina Faso': { name: 'Burkina Faso', regions: null },
+      'Cape Verde': { name: 'Cape Verde', regions: null },
+      "Cote d'Ivoire": { name: "Côte d'Ivoire", regions: null },
+      'Gambia': { name: 'Gambia', regions: null },
+      'Ghana': { name: 'Ghana', regions: null },
+      'Guinea': { name: 'Guinea', regions: null },
+      'Guinea-Bissau': { name: 'Guinea-Bissau', regions: null },
+      'Liberia': { name: 'Liberia', regions: null },
+      'Mali': { name: 'Mali', regions: null },
+      'Niger': { name: 'Niger', regions: null },
+      'Nigeria': { name: 'Nigeria', regions: null },
+      'Senegal': { name: 'Senegal', regions: null },
+      'Sierra Leone': { name: 'Sierra Leone', regions: null },
+      'Togo': { name: 'Togo', regions: null },
+    }
+  },
+  'africa-east': {
+    name: 'Africa (East)',
+    countries: {
+      'Burundi': { name: 'Burundi', regions: null },
+      'Comoros': { name: 'Comoros', regions: null },
+      'Djibouti': { name: 'Djibouti', regions: null },
+      'Eritrea': { name: 'Eritrea', regions: null },
+      'Ethiopia': { name: 'Ethiopia', regions: null },
+      'Kenya': { name: 'Kenya', regions: null },
+      'Madagascar': { name: 'Madagascar', regions: null },
+      'Malawi': { name: 'Malawi', regions: null },
+      'Mauritius': { name: 'Mauritius', regions: null },
+      'Mozambique': { name: 'Mozambique', regions: null },
+      'Rwanda': { name: 'Rwanda', regions: null },
+      'Seychelles': { name: 'Seychelles', regions: null },
+      'Somalia': { name: 'Somalia', regions: null },
+      'South Sudan': { name: 'South Sudan', regions: null },
+      'Tanzania': { name: 'Tanzania', regions: null },
+      'Uganda': { name: 'Uganda', regions: null },
+      'Zambia': { name: 'Zambia', regions: null },
+      'Zimbabwe': { name: 'Zimbabwe', regions: null },
+    }
+  },
+  'africa-central': {
+    name: 'Africa (Central)',
+    countries: {
+      'Cameroon': { name: 'Cameroon', regions: null },
+      'Central African Republic': { name: 'Central African Republic', regions: null },
+      'Chad': { name: 'Chad', regions: null },
+      'Republic of Congo': { name: 'Republic of Congo', regions: null },
+      'DR Congo': { name: 'DR Congo', regions: null },
+      'Equatorial Guinea': { name: 'Equatorial Guinea', regions: null },
+      'Gabon': { name: 'Gabon', regions: null },
+      'Sao Tome and Principe': { name: 'São Tomé and Príncipe', regions: null },
+    }
+  },
+  'africa-south': {
+    name: 'Africa (South)',
+    countries: {
+      'Angola': { name: 'Angola', regions: null },
+      'Botswana': { name: 'Botswana', regions: null },
+      'Eswatini': { name: 'Eswatini', regions: null },
+      'Lesotho': { name: 'Lesotho', regions: null },
+      'Namibia': { name: 'Namibia', regions: null },
+      'South Africa': { name: 'South Africa', regions: null },
+    }
+  },
+  'asia-central': {
+    name: 'Asia (Central)',
+    countries: {
+      'Kazakhstan': { name: 'Kazakhstan', regions: null },
+      'Kyrgyzstan': { name: 'Kyrgyzstan', regions: null },
+      'Tajikistan': { name: 'Tajikistan', regions: null },
+      'Turkmenistan': { name: 'Turkmenistan', regions: null },
+      'Uzbekistan': { name: 'Uzbekistan', regions: null },
+    }
+  },
+  'asia-east': {
+    name: 'Asia (East)',
+    countries: {
+      'China': { name: 'China', regions: null },
+      'Hong Kong': { name: 'Hong Kong', regions: null },
+      'Japan': { name: 'Japan', regions: null },
+      'Macau': { name: 'Macau', regions: null },
+      'Mongolia': { name: 'Mongolia', regions: null },
+      'North Korea': { name: 'North Korea', regions: null },
+      'South Korea': { name: 'South Korea', regions: null },
+      'Taiwan': { name: 'Taiwan', regions: null },
+    }
+  },
+  'asia-south': {
+    name: 'Asia (South)',
+    countries: {
+      'Afghanistan': { name: 'Afghanistan', regions: null },
+      'Bangladesh': { name: 'Bangladesh', regions: null },
+      'Bhutan': { name: 'Bhutan', regions: null },
+      'India': { name: 'India', regions: null },
+      'Iran': { name: 'Iran', regions: null },
+      'Maldives': { name: 'Maldives', regions: null },
+      'Nepal': { name: 'Nepal', regions: null },
+      'Pakistan': { name: 'Pakistan', regions: null },
+      'Sri Lanka': { name: 'Sri Lanka', regions: null },
+    }
+  },
+  'asia-southeast': {
+    name: 'Asia (Southeast)',
+    countries: {
+      'Brunei': { name: 'Brunei', regions: null },
+      'Cambodia': { name: 'Cambodia', regions: null },
+      'Indonesia': { name: 'Indonesia', regions: null },
+      'Laos': { name: 'Laos', regions: null },
+      'Malaysia': { name: 'Malaysia', regions: null },
+      'Myanmar': { name: 'Myanmar', regions: null },
+      'Philippines': { name: 'Philippines', regions: null },
+      'Singapore': { name: 'Singapore', regions: null },
+      'Thailand': { name: 'Thailand', regions: null },
+      'Timor-Leste': { name: 'Timor-Leste', regions: null },
+      'Vietnam': { name: 'Vietnam', regions: null },
+    }
+  },
+  'middle-east': {
+    name: 'Middle East',
+    countries: {
+      'Bahrain': { name: 'Bahrain', regions: null },
+      'Iraq': { name: 'Iraq', regions: null },
+      'Israel': { name: 'Israel', regions: null },
+      'Jordan': { name: 'Jordan', regions: null },
+      'Kuwait': { name: 'Kuwait', regions: null },
+      'Lebanon': { name: 'Lebanon', regions: null },
+      'Oman': { name: 'Oman', regions: null },
+      'Palestine': { name: 'Palestine', regions: null },
+      'Qatar': { name: 'Qatar', regions: null },
+      'Saudi Arabia': { name: 'Saudi Arabia', regions: null },
+      'Syria': { name: 'Syria', regions: null },
+      'Turkey': { name: 'Turkey', regions: null },
+      'UAE': { name: 'United Arab Emirates', regions: null },
+      'Yemen': { name: 'Yemen', regions: null },
+    }
+  },
+  'oceania': {
+    name: 'Oceania',
+    countries: {
+      'Australia': { name: 'Australia', regions: ['New South Wales','Victoria','Queensland','Western Australia','South Australia','Tasmania','Australian Capital Territory','Northern Territory'] },
+      'Fiji': { name: 'Fiji', regions: null },
+      'Kiribati': { name: 'Kiribati', regions: null },
+      'Marshall Islands': { name: 'Marshall Islands', regions: null },
+      'Micronesia': { name: 'Micronesia', regions: null },
+      'Nauru': { name: 'Nauru', regions: null },
+      'New Caledonia': { name: 'New Caledonia', regions: null },
+      'New Zealand': { name: 'New Zealand', regions: null },
+      'Palau': { name: 'Palau', regions: null },
+      'Papua New Guinea': { name: 'Papua New Guinea', regions: null },
+      'Samoa': { name: 'Samoa', regions: null },
+      'Solomon Islands': { name: 'Solomon Islands', regions: null },
+      'Tonga': { name: 'Tonga', regions: null },
+      'Tuvalu': { name: 'Tuvalu', regions: null },
+      'Vanuatu': { name: 'Vanuatu', regions: null },
+    }
+  },
+};
+
+let _globalRemoteSelected = {};  // {continent: {country: [regions]}}
+
 // ── Search Config ───────────────────────────────────────────────────
+let _searchData = {};  // Holds current form state
+
+function setSearchMode(mode) {
+  document.getElementById('search-form-mode').style.display = mode === 'form' ? '' : 'none';
+  document.getElementById('search-yaml-mode').style.display = mode === 'yaml' ? '' : 'none';
+  document.getElementById('btn-form-mode').style.opacity = mode === 'form' ? '1' : '.5';
+  document.getElementById('btn-yaml-mode').style.opacity = mode === 'yaml' ? '1' : '.5';
+  if (mode === 'yaml') loadSearchesYaml();
+}
+
 async function loadSearches() {
+  // Load structured data for form
+  const data = await api('/api/searches?format=json');
+  _searchData = data.data || {
+    queries: [], locations: [], location: {accept_patterns: [], reject_patterns: []},
+    country: 'USA', boards: ['indeed','linkedin','glassdoor','zip_recruiter','google'],
+    defaults: {results_per_site: 100, hours_old: 72},
+    exclusions: {titles: [], experience: [], description: [], salary: []},
+    global_remote_locations: [],
+  };
+  // Convert hours_old to days if present
+  if (_searchData.defaults && _searchData.defaults.hours_old && !_searchData.defaults.days_old) {
+    _searchData.defaults.days_old = Math.ceil(_searchData.defaults.hours_old / 24);
+  }
+
+  // Load global remote locations if present
+  _globalRemoteSelected = {};
+  for (const region of Object.keys(GLOBAL_LOCATIONS)) {
+    _globalRemoteSelected[region] = {};
+  }
+  if (_searchData.global_remote_locations && _searchData.global_remote_locations.length > 0) {
+    document.getElementById('global-remote-enable').checked = true;
+    document.getElementById('global-remote-panel').style.display = '';
+    _searchData.global_remote_locations.forEach(loc => {
+      const region = loc.continent;
+      const country = loc.country;
+      if (region && country && _globalRemoteSelected[region] !== undefined) {
+        if (loc.regions && loc.regions.length > 0) {
+          _globalRemoteSelected[region][country] = loc.regions;
+        } else {
+          _globalRemoteSelected[region][country] = true;
+        }
+      }
+    });
+    updateGlobalRemoteDisplay();
+  }
+
+  renderSearchForm();
+}
+
+async function loadSearchesYaml() {
   const data = await api('/api/searches');
   const editor = document.getElementById('searches-editor');
   if (data.exists) {
     editor.value = data.content;
   } else {
-    editor.value = '# No searches.yaml found. Create one with your job search queries.\n# Example:\n#\n# locations:\n#   - "Remote"\n#   - "New York, NY"\n#\n# queries:\n#   - title: "Software Engineer"\n#     tier: 1\n';
+    editor.value = '# No searches.yaml found.\n# Switch to Form Editor to configure your search.';
   }
+}
+
+function renderSearchForm() {
+  // Queries
+  const ql = document.getElementById('queries-list');
+  ql.innerHTML = _searchData.queries.map((q, i) =>
+    `<div class="search-row">
+      <input type="text" value="${esc(q.query || '')}" onchange="_searchData.queries[${i}].query=this.value" placeholder="e.g. software engineer">
+      <select onchange="_searchData.queries[${i}].tier=parseInt(this.value)">
+        <option value="1" ${q.tier===1?'selected':''}>Tier 1</option>
+        <option value="2" ${q.tier===2?'selected':''}>Tier 2</option>
+        <option value="3" ${q.tier===3?'selected':''}>Tier 3</option>
+      </select>
+      <span class="row-remove" onclick="removeQuery(${i})">&times;</span>
+    </div>`
+  ).join('');
+
+  // Locations
+  const ll = document.getElementById('locations-list');
+  ll.innerHTML = _searchData.locations.map((loc, i) =>
+    `<div class="search-row">
+      <input type="text" value="${esc(loc.location || '')}" onchange="_searchData.locations[${i}].location=this.value" placeholder="e.g. San Francisco, CA" style="flex:1.5;">
+      <input type="number" value="${loc.distance || 0}" onchange="_searchData.locations[${i}].distance=parseInt(this.value)||0" placeholder="Radius (miles)" min="0" max="100" style="width:110px;" title="Search radius in miles (0=remote-only)">
+      <label style="display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:13px;cursor:pointer;">
+        <input type="checkbox" ${loc.remote?'checked':''} onchange="_searchData.locations[${i}].remote=this.checked"> Remote
+      </label>
+      <span class="row-remove" onclick="removeLocation(${i})">&times;</span>
+    </div>`
+  ).join('');
+
+  // Boards
+  document.querySelectorAll('.board-cb').forEach(cb => {
+    cb.checked = (_searchData.boards || []).includes(cb.value);
+  });
+
+  // Country
+  const csel = document.getElementById('search-country');
+  if (csel) {
+    // If the country isn't in the dropdown, add it
+    const country = _searchData.country || 'USA';
+    let found = false;
+    for (const opt of csel.options) { if (opt.value === country) { found = true; break; } }
+    if (!found) { const o = document.createElement('option'); o.value = country; o.text = country; csel.add(o); }
+    csel.value = country;
+  }
+
+  // Defaults
+  document.getElementById('search-results-per-site').value = (_searchData.defaults || {}).results_per_site || 100;
+  const daysOld = (_searchData.defaults || {}).days_old || Math.ceil(((_searchData.defaults || {}).hours_old || 72) / 24);
+  document.getElementById('search-days-old').value = daysOld;
+
+  // Accept patterns
+  renderTags('accept-patterns-list', (_searchData.location || {}).accept_patterns || [], 'accept');
+
+  // Reject patterns
+  renderTags('reject-patterns-list', (_searchData.location || {}).reject_patterns || [], 'reject');
+
+  // Exclusions
+  const excl = _searchData.exclusions || {titles: [], experience: [], description: [], salary: []};
+  renderTags('exclude-titles-list', excl.titles || [], 'title');
+  renderTags('exclude-experience-list', excl.experience || [], 'experience');
+  renderTags('exclude-description-list', excl.description || [], 'description');
+  renderTags('exclude-salary-list', excl.salary || [], 'salary');
+}
+
+function renderTags(containerId, items, type) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = items.map((item, i) =>
+    `<span class="tag-item">${esc(item)}<span class="tag-remove" onclick="removeTag('${type}',${i})">&times;</span></span>`
+  ).join('');
+}
+
+function addQuery() {
+  _searchData.queries.push({query: '', tier: 2});
+  renderSearchForm();
+  // Focus the new input
+  const rows = document.querySelectorAll('#queries-list .search-row input[type="text"]');
+  if (rows.length) rows[rows.length - 1].focus();
+}
+
+function removeQuery(i) {
+  _searchData.queries.splice(i, 1);
+  renderSearchForm();
+}
+
+function addLocation() {
+  _searchData.locations.push({location: '', distance: 0, remote: false});
+  renderSearchForm();
+  const rows = document.querySelectorAll('#locations-list .search-row input[type="text"]');
+  if (rows.length) rows[rows.length - 1].focus();
+}
+
+function removeLocation(i) {
+  _searchData.locations.splice(i, 1);
+  renderSearchForm();
+}
+
+function addPattern(type) {
+  const input = document.getElementById(type + '-pattern-input');
+  const val = input.value.trim();
+  if (!val) return;
+  if (!_searchData.location) _searchData.location = {accept_patterns: [], reject_patterns: []};
+  _searchData.location[type + '_patterns'].push(val);
+  input.value = '';
+  renderSearchForm();
+}
+
+function addExclusion(type) {
+  const input = document.getElementById('exclude-' + type + '-input');
+  const val = input.value.trim();
+  if (!val) return;
+  if (!_searchData.exclusions) _searchData.exclusions = {titles: [], experience: [], description: [], salary: []};
+
+  const typeKey = type === 'title' ? 'titles' : type;
+  if (!_searchData.exclusions[typeKey]) _searchData.exclusions[typeKey] = [];
+  _searchData.exclusions[typeKey].push(val);
+  input.value = '';
+  renderSearchForm();
+}
+
+function removeTag(type, i) {
+  if (type === 'accept') _searchData.location.accept_patterns.splice(i, 1);
+  else if (type === 'reject') _searchData.location.reject_patterns.splice(i, 1);
+  else if (type === 'title' || type === 'experience' || type === 'description' || type === 'salary') {
+    const typeKey = type === 'title' ? 'titles' : type;
+    if (_searchData.exclusions && _searchData.exclusions[typeKey]) {
+      _searchData.exclusions[typeKey].splice(i, 1);
+    }
+  }
+  renderSearchForm();
+}
+
+function collectFormData() {
+  // Collect boards from checkboxes
+  const boards = [];
+  document.querySelectorAll('.board-cb:checked').forEach(cb => boards.push(cb.value));
+  _searchData.boards = boards;
+
+  // Collect country and defaults
+  _searchData.country = document.getElementById('search-country').value;
+  const daysOld = parseInt(document.getElementById('search-days-old').value) || 3;
+  _searchData.defaults = {
+    results_per_site: parseInt(document.getElementById('search-results-per-site').value) || 100,
+    hours_old: daysOld * 24,  // Convert days to hours for backend
+    days_old: daysOld,
+  };
+
+  // Collect global remote locations if enabled
+  if (document.getElementById('global-remote-enable').checked) {
+    _searchData.global_remote_locations = getGlobalRemoteLocations();
+  } else {
+    _searchData.global_remote_locations = [];
+  }
+
+  return _searchData;
+}
+
+async function saveSearchesForm() {
+  const formData = collectFormData();
+  const r = await api('/api/searches', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ data: formData }),
+  });
+  if (r.error) { toast(r.error, 'err'); } else { toast('Search config saved!'); }
 }
 
 async function saveSearches() {
@@ -1009,7 +2398,244 @@ async function saveSearches() {
   if (r.error) { toast(r.error, 'err'); } else { toast('Search config saved!'); }
 }
 
+// ── Global Remote Functions ──────────────────────────────────────────
+function toggleGlobalRemote() {
+  const enabled = document.getElementById('global-remote-enable').checked;
+  document.getElementById('global-remote-panel').style.display = enabled ? '' : 'none';
+  if (enabled && Object.keys(_globalRemoteSelected).length === 0) {
+    renderGlobalRemoteUI();
+  }
+}
+
+function toggleContinent(continent) {
+  const panel = document.getElementById('global-countries-panel');
+  // Deactivate all buttons
+  document.querySelectorAll('#continent-buttons .btn').forEach(b => b.style.borderColor = '');
+  if (panel.style.display === 'none' || panel.dataset.continent !== continent) {
+    panel.dataset.continent = continent;
+    renderCountriesPanel(continent);
+    panel.style.display = '';
+    const btn = document.getElementById('cb-' + continent);
+    if (btn) btn.style.borderColor = 'var(--accent)';
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+function renderGlobalRemoteUI() {
+  // Initialize empty selection if needed
+  if (Object.keys(_globalRemoteSelected).length === 0) {
+    for (const region of Object.keys(GLOBAL_LOCATIONS)) {
+      _globalRemoteSelected[region] = {};
+    }
+  }
+  updateGlobalRemoteDisplay();
+}
+
+function renderCountriesPanel(continent) {
+  const data = GLOBAL_LOCATIONS[continent];
+  const countryKeys = Object.keys(data.countries);
+  const selectedContinent = _globalRemoteSelected[continent] || {};
+  const selectedCount = Object.keys(selectedContinent).length;
+  const totalCount = countryKeys.length;
+
+  let html = '';
+  for (const [countryKey, countryData] of Object.entries(data.countries)) {
+    const selected = selectedContinent[countryKey];
+    const regions = countryData.regions;
+    const hasSubRegions = regions && regions.length > 1;
+
+    html += `<div style="padding:8px;border:1px solid var(--border);border-radius:4px;">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:${hasSubRegions ? '6px' : '0'};">
+        <input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleCountry('${continent}', '${countryKey}', this.checked)">
+        <strong style="font-size:12px;">${countryData.name}</strong>
+      </label>`;
+
+    if (hasSubRegions && selected) {
+      const selectedRegions = selectedContinent[countryKey] || [];
+      html += `<div style="margin-left:24px;display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;">`;
+      regions.forEach(region => {
+        const regionSelected = selectedRegions.includes(region);
+        html += `<label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" ${regionSelected ? 'checked' : ''} onchange="toggleRegion('${continent}', '${countryKey}', '${region}', this.checked)">
+          ${region}
+        </label>`;
+      });
+      html += '</div>';
+    }
+
+    html += '</div>';
+  }
+  document.getElementById('countries-list').innerHTML = html;
+
+  // Update select-all checkbox state
+  const selectAll = document.getElementById('select-all-countries');
+  if (selectAll) {
+    selectAll.checked = selectedCount === totalCount && totalCount > 0;
+    selectAll.indeterminate = selectedCount > 0 && selectedCount < totalCount;
+  }
+
+  // Update count label
+  const countLabel = document.getElementById('region-country-count');
+  if (countLabel) {
+    countLabel.textContent = selectedCount > 0 ? `${selectedCount} / ${totalCount} selected` : `${totalCount} countries`;
+  }
+}
+
+function selectAllCountries(checked) {
+  const continent = document.getElementById('global-countries-panel').dataset.continent;
+  if (!continent) return;
+
+  if (!_globalRemoteSelected[continent]) _globalRemoteSelected[continent] = {};
+
+  if (checked) {
+    for (const [countryKey, countryData] of Object.entries(GLOBAL_LOCATIONS[continent].countries)) {
+      const regions = countryData.regions;
+      _globalRemoteSelected[continent][countryKey] = regions ? [...regions] : true;
+    }
+  } else {
+    _globalRemoteSelected[continent] = {};
+  }
+
+  renderCountriesPanel(continent);
+  updateGlobalRemoteDisplay();
+}
+
+function toggleCountry(continent, country, checked) {
+  if (!_globalRemoteSelected[continent]) _globalRemoteSelected[continent] = {};
+
+  if (checked) {
+    const regions = GLOBAL_LOCATIONS[continent].countries[country].regions;
+    if (regions) {
+      // Multi-region country - select all regions by default
+      _globalRemoteSelected[continent][country] = [...regions];
+    } else {
+      // Single country
+      _globalRemoteSelected[continent][country] = true;
+    }
+  } else {
+    delete _globalRemoteSelected[continent][country];
+  }
+
+  renderCountriesPanel(document.getElementById('global-countries-panel').dataset.continent);
+  updateGlobalRemoteDisplay();
+}
+
+function toggleRegion(continent, country, region, checked) {
+  if (!_globalRemoteSelected[continent][country]) _globalRemoteSelected[continent][country] = [];
+
+  if (checked) {
+    if (!_globalRemoteSelected[continent][country].includes(region)) {
+      _globalRemoteSelected[continent][country].push(region);
+    }
+  } else {
+    _globalRemoteSelected[continent][country] = _globalRemoteSelected[continent][country].filter(r => r !== region);
+    if (_globalRemoteSelected[continent][country].length === 0) {
+      delete _globalRemoteSelected[continent][country];
+    }
+  }
+
+  updateGlobalRemoteDisplay();
+}
+
+function updateGlobalRemoteDisplay() {
+  // Count total locations
+  let count = 0;
+  const tags = [];
+
+  for (const [continent, countries] of Object.entries(_globalRemoteSelected)) {
+    for (const [country, selection] of Object.entries(countries)) {
+      if (selection === true) {
+        count++;
+        const countryName = GLOBAL_LOCATIONS[continent].countries[country].name;
+        tags.push(`<span class="tag-item">${countryName}</span>`);
+      } else if (Array.isArray(selection)) {
+        const regionNames = selection.map(r => `${r}`).join(', ');
+        const countryName = GLOBAL_LOCATIONS[continent].countries[country].name;
+        count += selection.length;
+        tags.push(`<span class="tag-item">${countryName} (${regionNames})</span>`);
+      }
+    }
+  }
+
+  document.getElementById('global-remote-count').textContent = count;
+  document.getElementById('global-remote-selected').innerHTML = tags.join('');
+}
+
+function getGlobalRemoteLocations() {
+  // Convert selected to location array format
+  const locations = [];
+  for (const [continent, countries] of Object.entries(_globalRemoteSelected)) {
+    for (const [country, selection] of Object.entries(countries)) {
+      if (selection === true) {
+        locations.push({ country, continent, remote: true });
+      } else if (Array.isArray(selection) && selection.length > 0) {
+        locations.push({ country, regions: selection, continent, remote: true });
+      }
+    }
+  }
+  return locations;
+}
+
 // ── Env Display ─────────────────────────────────────────────────────
+// ── Learning Settings ──────────────────────────────────────────────
+
+async function loadLearningSettings() {
+  const data = await api('/api/learning-settings');
+  const autoSendToggle = document.getElementById('learning-auto-send');
+  const thresholdSlider = document.getElementById('learning-threshold');
+
+  if (data && !data.error) {
+    autoSendToggle.checked = data.auto_send_enabled || false;
+    thresholdSlider.value = Math.round((data.confidence_threshold || 0.9) * 100);
+    updateThresholdDisplay();
+  }
+}
+
+function toggleAutoSend() {
+  // Just update UI, save on save button click
+  const toggle = document.getElementById('learning-auto-send');
+  const status = document.getElementById('learning-status');
+  status.style.display = 'none';
+}
+
+function updateThresholdDisplay() {
+  const slider = document.getElementById('learning-threshold');
+  const display = document.getElementById('learning-threshold-display');
+  display.textContent = slider.value + '%';
+}
+
+async function saveLearningSettings() {
+  const autoSend = document.getElementById('learning-auto-send').checked;
+  const threshold = parseInt(document.getElementById('learning-threshold').value) / 100;
+
+  const r = await fetch('/api/learning-settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      auto_send_enabled: autoSend,
+      confidence_threshold: threshold,
+    }),
+  });
+
+  const data = await r.json();
+  const status = document.getElementById('learning-status');
+
+  if (data.error) {
+    status.style.background = 'rgba(248, 113, 113, 0.1)';
+    status.style.color = 'var(--red)';
+    status.textContent = '❌ ' + data.error;
+    status.style.display = 'block';
+    toast(data.error, 'err');
+  } else {
+    status.style.background = 'rgba(74, 222, 128, 0.1)';
+    status.style.color = 'var(--green)';
+    status.textContent = '✓ Settings saved! Auto-send is ' + (autoSend ? 'ON (threshold: ' + Math.round(threshold * 100) + '%)' : 'OFF');
+    status.style.display = 'block';
+    toast('Learning settings saved');
+  }
+}
+
 async function loadEnvDisplay() {
   const data = await api('/api/env');
   const div = document.getElementById('env-display');
@@ -1033,6 +2659,7 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 
 // ── Init ────────────────────────────────────────────────────────────
 loadDashboard();
+refreshQueueBadge();
 </script>
 </body>
 </html>

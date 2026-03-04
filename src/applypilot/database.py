@@ -114,6 +114,9 @@ def init_db(db_path: Path | str | None = None) -> sqlite3.Connection:
             tailored_resume_path  TEXT,
             tailored_at           TEXT,
             tailor_attempts       INTEGER DEFAULT 0,
+            resume_id             TEXT DEFAULT 'default',
+            resume_selection_method TEXT DEFAULT 'auto',
+            selected_resume_path  TEXT,
 
             -- Cover letter stage
             cover_letter_path     TEXT,
@@ -130,6 +133,35 @@ def init_db(db_path: Path | str | None = None) -> sqlite3.Connection:
             apply_duration_ms     INTEGER,
             apply_task_id         TEXT,
             verification_confidence TEXT
+        )
+    """)
+    conn.commit()
+
+    # Resume conflict queue: jobs paused because multiple resumes match
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS resume_conflict_queue (
+            url           TEXT PRIMARY KEY REFERENCES jobs(url),
+            job_title     TEXT,
+            matches_json  TEXT,        -- JSON array of matching resumes
+            match_count   INTEGER,
+            queued_at     TEXT,
+            resolved_at   TEXT,        -- NULL until user picks a resume
+            chosen_resume_id TEXT,     -- which resume the user picked
+            recommendation_id TEXT,    -- system's recommendation (from learning)
+            recommendation_confidence REAL DEFAULT 0.0
+        )
+    """)
+
+    # Resume selection history: records every manual choice for learning
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS resume_selections (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_url       TEXT,
+            job_title     TEXT,
+            chosen_resume_id TEXT,
+            matched_keyword  TEXT,     -- which keyword triggered this resume
+            all_matches_json TEXT,     -- all resumes that matched
+            selected_at   TEXT
         )
     """)
     conn.commit()
@@ -166,6 +198,9 @@ _ALL_COLUMNS: dict[str, str] = {
     "tailored_resume_path": "TEXT",
     "tailored_at": "TEXT",
     "tailor_attempts": "INTEGER DEFAULT 0",
+    "resume_id": "TEXT DEFAULT 'default'",
+    "resume_selection_method": "TEXT DEFAULT 'auto'",
+    "selected_resume_path": "TEXT",
     # Cover letter
     "cover_letter_path": "TEXT",
     "cover_letter_at": "TEXT",
@@ -322,6 +357,18 @@ def get_stats(conn: sqlite3.Connection | None = None) -> dict:
         "AND applied_at IS NULL "
         "AND application_url IS NOT NULL"
     ).fetchone()[0]
+
+    # Resume conflict queue
+    try:
+        stats["resume_conflicts_pending"] = conn.execute(
+            "SELECT COUNT(*) FROM resume_conflict_queue WHERE resolved_at IS NULL"
+        ).fetchone()[0]
+        stats["resume_conflicts_resolved"] = conn.execute(
+            "SELECT COUNT(*) FROM resume_conflict_queue WHERE resolved_at IS NOT NULL"
+        ).fetchone()[0]
+    except Exception:
+        stats["resume_conflicts_pending"] = 0
+        stats["resume_conflicts_resolved"] = 0
 
     return stats
 
