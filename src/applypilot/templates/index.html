@@ -1060,6 +1060,7 @@ async function loadResumesList() {
     `;
 
     const tags = (resume.tags || []).join(', ');
+    const resumeId = resume.id;
     card.innerHTML = `
       <div>
         <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
@@ -1072,11 +1073,118 @@ async function loadResumesList() {
         ${tags ? `<p style="margin:0;font-size:11px;color:var(--accent);">Tags: ${esc(tags)}</p>` : ''}
         <p style="margin:0;font-size:11px;color:var(--text-dim);">Created: ${new Date(resume.created_at).toLocaleDateString()}</p>
       </div>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-sm btn-secondary" onclick="viewResume('${esc(resume.id)}')">View</button>
-        ${!isDefault ? `<button class="btn btn-sm btn-secondary" onclick="setDefaultResume('${esc(resume.id)}')">Set Default</button>` : ''}
-        ${resume.id !== 'default' ? `<button class="btn btn-sm" style="background:var(--red);color:white;" onclick="deleteResume('${esc(resume.id)}')">Delete</button>` : ''}
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button class="btn btn-sm btn-secondary" onclick="viewResume('${esc(resumeId)}')">View</button>
+        ${!isDefault ? `<button class="btn btn-sm btn-secondary" onclick="setDefaultResume('${esc(resumeId)}')">Set Default</button>` : ''}
+        <button class="btn btn-sm btn-secondary" onclick="toggleKeywordEditor('${esc(resumeId)}')">Job Titles</button>
+        ${resume.id !== 'default' ? `<button class="btn btn-sm" style="background:var(--red);color:white;" onclick="deleteResume('${esc(resumeId)}')">Delete</button>` : ''}
       </div>
+      <div id="keywords-editor-${esc(resumeId)}" style="display:none;background:var(--surface);padding:12px;border:1px solid var(--border);border-radius:6px;margin-top:8px;"></div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+async function toggleKeywordEditor(resumeId) {
+  const editor = document.getElementById(`keywords-editor-${esc(resumeId)}`);
+  if (editor.style.display === 'none') {
+    editor.style.display = 'block';
+    await loadKeywordEditor(resumeId);
+  } else {
+    editor.style.display = 'none';
+  }
+}
+
+async function loadKeywordEditor(resumeId) {
+  const data = await api(`/api/resumes/${resumeId}/keywords`);
+  const editor = document.getElementById(`keywords-editor-${esc(resumeId)}`);
+
+  if (data.error) {
+    editor.innerHTML = `<span style="color:var(--red);">${esc(data.error)}</span>`;
+    return;
+  }
+
+  const keywords = data.keywords || [];
+  const keywordString = keywords.join(', ');
+
+  editor.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <label style="font-size:12px;font-weight:bold;">Job Title Keywords</label>
+      <p style="margin:0;font-size:11px;color:var(--text-dim);">Auto-assign this resume to jobs with these keywords in the title. (comma or space-separated)</p>
+      <input type="text" id="keywords-input-${esc(resumeId)}" value="${esc(keywordString)}" placeholder="python, backend, senior" style="padding:8px;border:1px solid var(--border);border-radius:4px;font-size:12px;">
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-sm" onclick="saveKeywords('${esc(resumeId)}')">Save</button>
+        <button class="btn btn-sm btn-secondary" onclick="toggleKeywordEditor('${esc(resumeId)}')">Cancel</button>
+      </div>
+    </div>
+  `;
+}
+
+async function saveKeywords(resumeId) {
+  const input = document.getElementById(`keywords-input-${esc(resumeId)}`);
+  const keywordString = input.value;
+
+  const r = await fetch(`/api/resumes/${resumeId}/keywords`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ keywords: keywordString })
+  });
+
+  const data = await r.json();
+  if (data.error) {
+    toast(data.error, 'err');
+  } else {
+    toast(`Keywords saved for ${resumeId}`);
+    toggleKeywordEditor(resumeId);
+    loadResumesList();
+  }
+}
+
+async function loadResumesList() {
+  const data = await api('/api/resumes');
+  const list = document.getElementById('resumes-list');
+  list.innerHTML = '';
+
+  if (!data.resumes || data.resumes.length === 0) {
+    list.innerHTML = '<p style="color:var(--text-dim)">No resumes uploaded yet.</p>';
+    return;
+  }
+
+  data.resumes.forEach(resume => {
+    const isDefault = resume.id === data.default_resume_id;
+    const card = document.createElement('div');
+    card.style.cssText = `
+      background:var(--surface2);
+      border:1px solid var(--border);
+      border-radius:8px;
+      padding:16px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    `;
+
+    const tags = (resume.tags || []).join(', ');
+    const resumeId = resume.id;
+    card.innerHTML = `
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
+          <div>
+            <h4 style="margin:0;margin-bottom:4px;">${esc(resume.name)}</h4>
+            <p style="margin:0;font-size:12px;color:var(--text-dim);">${esc(resume.description || 'No description')}</p>
+          </div>
+          ${isDefault ? '<span style="background:var(--accent);color:var(--surface);padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold;">DEFAULT</span>' : ''}
+        </div>
+        ${tags ? `<p style="margin:0;font-size:11px;color:var(--accent);">Tags: ${esc(tags)}</p>` : ''}
+        ${resume.job_title_keywords && resume.job_title_keywords.length ? `<p style="margin:0;font-size:11px;color:var(--green);"><strong>Auto-matches:</strong> ${esc(resume.job_title_keywords.join(', '))}</p>` : ''}
+        <p style="margin:0;font-size:11px;color:var(--text-dim);">Created: ${new Date(resume.created_at).toLocaleDateString()}</p>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button class="btn btn-sm btn-secondary" onclick="viewResume('${esc(resumeId)}')">View</button>
+        ${!isDefault ? `<button class="btn btn-sm btn-secondary" onclick="setDefaultResume('${esc(resumeId)}')">Set Default</button>` : ''}
+        <button class="btn btn-sm btn-secondary" onclick="toggleKeywordEditor('${esc(resumeId)}')">Job Titles</button>
+        ${resume.id !== 'default' ? `<button class="btn btn-sm" style="background:var(--red);color:white;" onclick="deleteResume('${esc(resumeId)}')">Delete</button>` : ''}
+      </div>
+      <div id="keywords-editor-${esc(resumeId)}" style="display:none;background:var(--surface);padding:12px;border:1px solid var(--border);border-radius:6px;margin-top:8px;"></div>
     `;
     list.appendChild(card);
   });

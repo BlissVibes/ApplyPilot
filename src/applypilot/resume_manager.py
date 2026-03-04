@@ -11,20 +11,33 @@ def get_job_resume_id(job: dict, default_id: str = "default") -> str:
 
     Selection priority:
     1. Job's explicit override (resume_id if selection_method == 'override')
-    2. Job's resume_id (if auto-assigned)
-    3. User's default resume
+    2. Job title pattern match (if job title matches resume keywords)
+    3. Job's assigned resume_id (if auto-assigned to this job)
+    4. User's default resume
 
     Args:
-        job: Job dict with possible resume_id and resume_selection_method fields.
+        job: Job dict with possible title, resume_id, resume_selection_method fields.
         default_id: Default resume ID to fall back to.
 
     Returns:
         Resume ID to use for this job.
     """
+    # 1. Explicit override always wins
     if job.get("resume_selection_method") == "override":
         return job.get("resume_id", default_id)
-    if job.get("resume_id"):
+
+    # 2. Try job title pattern matching
+    job_title = (job.get("title") or "").lower()
+    if job_title:
+        matched_id = _match_job_to_resume(job_title)
+        if matched_id:
+            return matched_id
+
+    # 3. Use job's assigned resume_id (if not from pattern match above)
+    if job.get("resume_id") and job.get("resume_selection_method") != "override":
         return job["resume_id"]
+
+    # 4. Fall back to default
     return default_id
 
 
@@ -98,3 +111,82 @@ def set_default_resume_id(resume_id: str) -> None:
     manifest = load_resumes_manifest()
     manifest["default_resume_id"] = resume_id
     RESUMES_MANIFEST_PATH.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+
+def _match_job_to_resume(job_title: str) -> str | None:
+    """Check if job title matches any resume's job title keywords.
+
+    Matches against resume's job_title_keywords field (space or comma separated).
+    First match wins.
+
+    Args:
+        job_title: Job title to match (lowercase).
+
+    Returns:
+        Resume ID if a match is found, None otherwise.
+    """
+    manifest = load_resumes_manifest()
+    resumes = manifest.get("resumes", [])
+
+    for resume in resumes:
+        keywords = resume.get("job_title_keywords", [])
+        if not keywords:
+            continue
+
+        # Normalize keywords to list of lowercase strings
+        if isinstance(keywords, str):
+            keywords = [k.strip() for k in keywords.replace(",", " ").split() if k.strip()]
+
+        # Check if any keyword appears in job title
+        for keyword in keywords:
+            if keyword.lower() in job_title:
+                return resume.get("id")
+
+    return None
+
+
+def set_job_title_keywords(resume_id: str, keywords: list[str] | str) -> None:
+    """Set job title keywords that trigger this resume.
+
+    Args:
+        resume_id: Resume ID to configure.
+        keywords: List of keywords or space/comma-separated string.
+                  E.g., ["python", "backend"] or "python backend" or "python, backend"
+    """
+    import json
+    from applypilot.config import RESUMES_MANIFEST_PATH
+
+    # Normalize keywords to list
+    if isinstance(keywords, str):
+        keywords = [k.strip() for k in keywords.replace(",", " ").split() if k.strip()]
+
+    manifest = load_resumes_manifest()
+    resumes = manifest.get("resumes", [])
+
+    # Find and update the resume
+    for resume in resumes:
+        if resume.get("id") == resume_id:
+            resume["job_title_keywords"] = keywords
+            break
+
+    manifest["resumes"] = resumes
+    RESUMES_MANIFEST_PATH.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+
+def get_job_title_keywords(resume_id: str) -> list[str]:
+    """Get job title keywords for a resume.
+
+    Args:
+        resume_id: Resume ID to query.
+
+    Returns:
+        List of job title keywords, or empty list if none configured.
+    """
+    manifest = load_resumes_manifest()
+    resumes = manifest.get("resumes", [])
+
+    for resume in resumes:
+        if resume.get("id") == resume_id:
+            return resume.get("job_title_keywords", [])
+
+    return []

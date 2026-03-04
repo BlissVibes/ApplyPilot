@@ -25,6 +25,7 @@ from applypilot.config import (
 from applypilot.database import init_db, get_connection, get_stats, get_jobs_by_stage
 from applypilot.resume_manager import (
     assign_resume_to_job, validate_resume_exists, get_default_resume_id, set_default_resume_id,
+    set_job_title_keywords, get_job_title_keywords,
 )
 
 log = logging.getLogger(__name__)
@@ -421,6 +422,46 @@ def api_resume_set_default(resume_id):
 
     set_default_resume_id(resume_id)
     return jsonify({"status": "set", "default_resume_id": resume_id})
+
+
+@app.route("/api/resumes/<resume_id>/keywords", methods=["GET"])
+def api_resume_keywords_get(resume_id):
+    """Get job title keywords for a resume."""
+    if not validate_resume_exists(resume_id):
+        return jsonify({"error": "Resume not found"}), 404
+
+    keywords = get_job_title_keywords(resume_id)
+    return jsonify({
+        "resume_id": resume_id,
+        "keywords": keywords,
+    })
+
+
+@app.route("/api/resumes/<resume_id>/keywords", methods=["POST"])
+def api_resume_keywords_set(resume_id):
+    """Set job title keywords for a resume.
+
+    These keywords are used to auto-select this resume for matching job titles.
+    """
+    if not validate_resume_exists(resume_id):
+        return jsonify({"error": "Resume not found"}), 404
+
+    data = request.get_json() or {}
+    keywords = data.get("keywords", [])
+
+    # Normalize to list of strings
+    if isinstance(keywords, str):
+        keywords = [k.strip() for k in keywords.replace(",", " ").split() if k.strip()]
+    elif not isinstance(keywords, list):
+        keywords = []
+
+    set_job_title_keywords(resume_id, keywords)
+
+    return jsonify({
+        "status": "set",
+        "resume_id": resume_id,
+        "keywords": keywords,
+    })
 
 
 @app.route("/api/job/<path:url>/resume", methods=["GET"])
