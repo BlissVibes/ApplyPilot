@@ -319,24 +319,58 @@ def api_env_save():
 
 @app.route("/api/searches", methods=["GET"])
 def api_searches_get():
-    """Get search configuration."""
+    """Get search configuration as raw YAML or structured JSON."""
     try:
-        if SEARCH_CONFIG_PATH.exists():
-            content = SEARCH_CONFIG_PATH.read_text(encoding="utf-8")
-            return jsonify({"exists": True, "content": content})
-        return jsonify({"exists": False})
+        fmt = request.args.get("format", "raw")
+        if not SEARCH_CONFIG_PATH.exists():
+            if fmt == "json":
+                return jsonify({"exists": False, "data": {
+                    "queries": [], "locations": [], "location": {"accept_patterns": [], "reject_patterns": []},
+                    "country": "USA", "boards": ["indeed", "linkedin", "glassdoor", "zip_recruiter", "google"],
+                    "defaults": {"results_per_site": 100, "hours_old": 72}, "exclude_titles": [],
+                }})
+            return jsonify({"exists": False})
+
+        content = SEARCH_CONFIG_PATH.read_text(encoding="utf-8")
+        if fmt == "json":
+            import yaml
+            data = yaml.safe_load(content) or {}
+            # Normalise for the form
+            data.setdefault("queries", [])
+            data.setdefault("locations", [])
+            data.setdefault("location", {})
+            data["location"].setdefault("accept_patterns", [])
+            data["location"].setdefault("reject_patterns", [])
+            data.setdefault("country", "USA")
+            data.setdefault("boards", ["indeed", "linkedin", "glassdoor", "zip_recruiter", "google"])
+            data.setdefault("defaults", {"results_per_site": 100, "hours_old": 72})
+            data.setdefault("exclude_titles", [])
+            return jsonify({"exists": True, "data": data})
+        return jsonify({"exists": True, "content": content})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/searches", methods=["POST"])
 def api_searches_save():
-    """Save search configuration."""
+    """Save search configuration from raw YAML or structured JSON."""
     try:
         data = request.get_json(force=True)
-        content = data.get("content", "")
         ensure_dirs()
-        SEARCH_CONFIG_PATH.write_text(content, encoding="utf-8")
+
+        if "content" in data:
+            # Raw YAML mode
+            SEARCH_CONFIG_PATH.write_text(data["content"], encoding="utf-8")
+        elif "data" in data:
+            # Structured JSON mode — convert to YAML
+            import yaml
+            SEARCH_CONFIG_PATH.write_text(
+                yaml.dump(data["data"], default_flow_style=False, sort_keys=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+        else:
+            return jsonify({"error": "Provide 'content' (YAML) or 'data' (JSON)"}), 400
+
         return jsonify({"status": "saved"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

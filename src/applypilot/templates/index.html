@@ -67,7 +67,21 @@ tr:hover td { background:rgba(108,138,255,.04); }
 .btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
 .btn-secondary:hover { background:var(--border); }
 .btn-danger { background:var(--red); color:#fff; }
-.btn-sm { padding:5px 10px; font-size:12px; }
+.btn-sm { padding:5px 10px; font-size:12px; background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+.btn-sm:hover { background:var(--border); }
+
+/* Tag list for pattern/filter items */
+.tag-list { display:flex; flex-wrap:wrap; gap:6px; min-height:28px; }
+.tag-item { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:14px; font-size:12px; color:var(--text); }
+.tag-item .tag-remove { cursor:pointer; color:var(--text-dim); font-size:14px; line-height:1; margin-left:2px; }
+.tag-item .tag-remove:hover { color:var(--red); }
+
+/* Query/location row */
+.search-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.search-row input[type="text"] { flex:1; }
+.search-row select { width:auto; min-width:80px; }
+.search-row .row-remove { cursor:pointer; color:var(--text-dim); font-size:18px; padding:4px 8px; border-radius:4px; }
+.search-row .row-remove:hover { color:var(--red); background:rgba(248,113,113,.1); }
 
 /* Forms */
 .form-group { margin-bottom:14px; }
@@ -363,10 +377,119 @@ textarea { min-height:100px; resize:vertical; }
       <div class="tab" onclick="showSettingsTab('env')">Environment</div>
     </div>
     <div id="settings-searches" class="settings-tab">
-      <h2>Search Configuration (searches.yaml)</h2>
-      <p style="color:var(--text-dim);margin-bottom:12px;">Define your job search queries, locations, and filters.</p>
-      <textarea id="searches-editor" style="min-height:300px;font-family:monospace;font-size:12px;"></textarea>
-      <button class="btn btn-primary" onclick="saveSearches()" style="margin-top:8px;">Save</button>
+      <h2>Search Configuration</h2>
+      <p style="color:var(--text-dim);margin-bottom:16px;">Define your job search queries, locations, and filters.</p>
+
+      <!-- Mode toggle -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button class="btn btn-sm" id="btn-form-mode" onclick="setSearchMode('form')" style="opacity:1;">Form Editor</button>
+        <button class="btn btn-sm" id="btn-yaml-mode" onclick="setSearchMode('yaml')" style="opacity:.5;">Raw YAML</button>
+      </div>
+
+      <!-- ═══ FORM MODE ═══ -->
+      <div id="search-form-mode">
+
+        <!-- Queries -->
+        <div class="card" style="margin-bottom:16px;padding:16px;">
+          <h3 style="margin-bottom:8px;">Job Search Queries</h3>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Tier 1 = high priority, Tier 2 = broader, Tier 3 = wide net</p>
+          <div id="queries-list"></div>
+          <button class="btn btn-sm" onclick="addQuery()" style="margin-top:8px;">+ Add Query</button>
+        </div>
+
+        <!-- Locations -->
+        <div class="card" style="margin-bottom:16px;padding:16px;">
+          <h3 style="margin-bottom:8px;">Search Locations</h3>
+          <div id="locations-list"></div>
+          <button class="btn btn-sm" onclick="addLocation()" style="margin-top:8px;">+ Add Location</button>
+        </div>
+
+        <!-- Job Boards -->
+        <div class="card" style="margin-bottom:16px;padding:16px;">
+          <h3 style="margin-bottom:8px;">Job Boards</h3>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Select which boards to search</p>
+          <div id="boards-checkboxes" style="display:flex;flex-wrap:wrap;gap:12px;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="indeed" class="board-cb"> Indeed</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="linkedin" class="board-cb"> LinkedIn</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="glassdoor" class="board-cb"> Glassdoor</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="zip_recruiter" class="board-cb"> ZipRecruiter</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="google" class="board-cb"> Google Jobs</label>
+          </div>
+        </div>
+
+        <!-- Country & Defaults -->
+        <div class="card" style="margin-bottom:16px;padding:16px;">
+          <h3 style="margin-bottom:12px;">Search Defaults</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+            <div class="form-group">
+              <label>Country</label>
+              <select id="search-country" style="width:100%;">
+                <option value="USA">USA</option>
+                <option value="UK">UK</option>
+                <option value="Canada">Canada</option>
+                <option value="Australia">Australia</option>
+                <option value="Germany">Germany</option>
+                <option value="France">France</option>
+                <option value="India">India</option>
+                <option value="Netherlands">Netherlands</option>
+                <option value="Ireland">Ireland</option>
+                <option value="Singapore">Singapore</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Results per site</label>
+              <input type="number" id="search-results-per-site" value="100" min="1" max="500" style="width:100%;">
+            </div>
+            <div class="form-group">
+              <label>Max job age (hours)</label>
+              <input type="number" id="search-hours-old" value="72" min="1" max="720" style="width:100%;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Location Filters -->
+        <div class="card" style="margin-bottom:16px;padding:16px;">
+          <h3 style="margin-bottom:8px;">Location Filters</h3>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Accept/reject jobs based on location text</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div>
+              <label style="font-size:12px;text-transform:uppercase;color:var(--green);margin-bottom:6px;display:block;">Accept Patterns</label>
+              <div id="accept-patterns-list" class="tag-list"></div>
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <input type="text" id="accept-pattern-input" placeholder="e.g. Remote, San Francisco" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addPattern('accept')}">
+                <button class="btn btn-sm" onclick="addPattern('accept')">Add</button>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:12px;text-transform:uppercase;color:var(--red);margin-bottom:6px;display:block;">Reject Patterns</label>
+              <div id="reject-patterns-list" class="tag-list"></div>
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <input type="text" id="reject-pattern-input" placeholder="e.g. London, UK" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addPattern('reject')}">
+                <button class="btn btn-sm" onclick="addPattern('reject')">Add</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Exclude Titles -->
+        <div class="card" style="margin-bottom:16px;padding:16px;">
+          <h3 style="margin-bottom:8px;">Exclude Job Titles</h3>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Skip jobs with these keywords in the title (case-insensitive)</p>
+          <div id="exclude-titles-list" class="tag-list"></div>
+          <div style="display:flex;gap:6px;margin-top:6px;">
+            <input type="text" id="exclude-title-input" placeholder="e.g. intern, VP, director" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addExcludeTitle()}">
+            <button class="btn btn-sm" onclick="addExcludeTitle()">Add</button>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" onclick="saveSearchesForm()" style="margin-top:4px;">Save Configuration</button>
+      </div>
+
+      <!-- ═══ YAML MODE ═══ -->
+      <div id="search-yaml-mode" style="display:none;">
+        <textarea id="searches-editor" style="min-height:300px;font-family:monospace;font-size:12px;"></textarea>
+        <button class="btn btn-primary" onclick="saveSearches()" style="margin-top:8px;">Save</button>
+      </div>
     </div>
     <div id="settings-env" class="settings-tab" style="display:none;">
       <h2>Environment Variables</h2>
@@ -989,14 +1112,176 @@ async function loadDoctor() {
 }
 
 // ── Search Config ───────────────────────────────────────────────────
+let _searchData = {};  // Holds current form state
+
+function setSearchMode(mode) {
+  document.getElementById('search-form-mode').style.display = mode === 'form' ? '' : 'none';
+  document.getElementById('search-yaml-mode').style.display = mode === 'yaml' ? '' : 'none';
+  document.getElementById('btn-form-mode').style.opacity = mode === 'form' ? '1' : '.5';
+  document.getElementById('btn-yaml-mode').style.opacity = mode === 'yaml' ? '1' : '.5';
+  if (mode === 'yaml') loadSearchesYaml();
+}
+
 async function loadSearches() {
+  // Load structured data for form
+  const data = await api('/api/searches?format=json');
+  _searchData = data.data || {
+    queries: [], locations: [], location: {accept_patterns: [], reject_patterns: []},
+    country: 'USA', boards: ['indeed','linkedin','glassdoor','zip_recruiter','google'],
+    defaults: {results_per_site: 100, hours_old: 72}, exclude_titles: [],
+  };
+  renderSearchForm();
+}
+
+async function loadSearchesYaml() {
   const data = await api('/api/searches');
   const editor = document.getElementById('searches-editor');
   if (data.exists) {
     editor.value = data.content;
   } else {
-    editor.value = '# No searches.yaml found. Create one with your job search queries.\n# Example:\n#\n# locations:\n#   - "Remote"\n#   - "New York, NY"\n#\n# queries:\n#   - title: "Software Engineer"\n#     tier: 1\n';
+    editor.value = '# No searches.yaml found.\n# Switch to Form Editor to configure your search.';
   }
+}
+
+function renderSearchForm() {
+  // Queries
+  const ql = document.getElementById('queries-list');
+  ql.innerHTML = _searchData.queries.map((q, i) =>
+    `<div class="search-row">
+      <input type="text" value="${esc(q.query || '')}" onchange="_searchData.queries[${i}].query=this.value" placeholder="e.g. software engineer">
+      <select onchange="_searchData.queries[${i}].tier=parseInt(this.value)">
+        <option value="1" ${q.tier===1?'selected':''}>Tier 1</option>
+        <option value="2" ${q.tier===2?'selected':''}>Tier 2</option>
+        <option value="3" ${q.tier===3?'selected':''}>Tier 3</option>
+      </select>
+      <span class="row-remove" onclick="removeQuery(${i})">&times;</span>
+    </div>`
+  ).join('');
+
+  // Locations
+  const ll = document.getElementById('locations-list');
+  ll.innerHTML = _searchData.locations.map((loc, i) =>
+    `<div class="search-row">
+      <input type="text" value="${esc(loc.location || '')}" onchange="_searchData.locations[${i}].location=this.value" placeholder="e.g. San Francisco, CA">
+      <label style="display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:13px;cursor:pointer;">
+        <input type="checkbox" ${loc.remote?'checked':''} onchange="_searchData.locations[${i}].remote=this.checked"> Remote
+      </label>
+      <span class="row-remove" onclick="removeLocation(${i})">&times;</span>
+    </div>`
+  ).join('');
+
+  // Boards
+  document.querySelectorAll('.board-cb').forEach(cb => {
+    cb.checked = (_searchData.boards || []).includes(cb.value);
+  });
+
+  // Country
+  const csel = document.getElementById('search-country');
+  if (csel) {
+    // If the country isn't in the dropdown, add it
+    const country = _searchData.country || 'USA';
+    let found = false;
+    for (const opt of csel.options) { if (opt.value === country) { found = true; break; } }
+    if (!found) { const o = document.createElement('option'); o.value = country; o.text = country; csel.add(o); }
+    csel.value = country;
+  }
+
+  // Defaults
+  document.getElementById('search-results-per-site').value = (_searchData.defaults || {}).results_per_site || 100;
+  document.getElementById('search-hours-old').value = (_searchData.defaults || {}).hours_old || 72;
+
+  // Accept patterns
+  renderTags('accept-patterns-list', (_searchData.location || {}).accept_patterns || [], 'accept');
+
+  // Reject patterns
+  renderTags('reject-patterns-list', (_searchData.location || {}).reject_patterns || [], 'reject');
+
+  // Exclude titles
+  renderTags('exclude-titles-list', _searchData.exclude_titles || [], 'exclude');
+}
+
+function renderTags(containerId, items, type) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = items.map((item, i) =>
+    `<span class="tag-item">${esc(item)}<span class="tag-remove" onclick="removeTag('${type}',${i})">&times;</span></span>`
+  ).join('');
+}
+
+function addQuery() {
+  _searchData.queries.push({query: '', tier: 2});
+  renderSearchForm();
+  // Focus the new input
+  const rows = document.querySelectorAll('#queries-list .search-row input[type="text"]');
+  if (rows.length) rows[rows.length - 1].focus();
+}
+
+function removeQuery(i) {
+  _searchData.queries.splice(i, 1);
+  renderSearchForm();
+}
+
+function addLocation() {
+  _searchData.locations.push({location: '', remote: false});
+  renderSearchForm();
+  const rows = document.querySelectorAll('#locations-list .search-row input[type="text"]');
+  if (rows.length) rows[rows.length - 1].focus();
+}
+
+function removeLocation(i) {
+  _searchData.locations.splice(i, 1);
+  renderSearchForm();
+}
+
+function addPattern(type) {
+  const input = document.getElementById(type + '-pattern-input');
+  const val = input.value.trim();
+  if (!val) return;
+  if (!_searchData.location) _searchData.location = {accept_patterns: [], reject_patterns: []};
+  _searchData.location[type + '_patterns'].push(val);
+  input.value = '';
+  renderSearchForm();
+}
+
+function addExcludeTitle() {
+  const input = document.getElementById('exclude-title-input');
+  const val = input.value.trim();
+  if (!val) return;
+  if (!_searchData.exclude_titles) _searchData.exclude_titles = [];
+  _searchData.exclude_titles.push(val);
+  input.value = '';
+  renderSearchForm();
+}
+
+function removeTag(type, i) {
+  if (type === 'accept') _searchData.location.accept_patterns.splice(i, 1);
+  else if (type === 'reject') _searchData.location.reject_patterns.splice(i, 1);
+  else if (type === 'exclude') _searchData.exclude_titles.splice(i, 1);
+  renderSearchForm();
+}
+
+function collectFormData() {
+  // Collect boards from checkboxes
+  const boards = [];
+  document.querySelectorAll('.board-cb:checked').forEach(cb => boards.push(cb.value));
+  _searchData.boards = boards;
+
+  // Collect country and defaults
+  _searchData.country = document.getElementById('search-country').value;
+  _searchData.defaults = {
+    results_per_site: parseInt(document.getElementById('search-results-per-site').value) || 100,
+    hours_old: parseInt(document.getElementById('search-hours-old').value) || 72,
+  };
+  return _searchData;
+}
+
+async function saveSearchesForm() {
+  const formData = collectFormData();
+  const r = await api('/api/searches', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ data: formData }),
+  });
+  if (r.error) { toast(r.error, 'err'); } else { toast('Search config saved!'); }
 }
 
 async function saveSearches() {
