@@ -15,8 +15,9 @@ import re
 import time
 from datetime import datetime, timezone
 
-from applypilot.config import RESUME_PATH, TAILORED_DIR, load_profile
+from applypilot.config import TAILORED_DIR, load_profile
 from applypilot.database import get_connection, get_jobs_by_stage
+from applypilot.resume_manager import get_job_resume_path
 from applypilot.llm import get_client, get_haiku_client
 from applypilot.scoring.validator import (
     BANNED_WORDS,
@@ -564,7 +565,6 @@ def run_tailoring(min_score: int = 7, limit: int = 20,
         {"approved": int, "failed": int, "errors": int, "elapsed": float}
     """
     profile = load_profile()
-    resume_text = RESUME_PATH.read_text(encoding="utf-8")
     conn = get_connection()
 
     jobs = get_jobs_by_stage(conn=conn, stage="pending_tailor", min_score=min_score, limit=limit)
@@ -583,6 +583,10 @@ def run_tailoring(min_score: int = 7, limit: int = 20,
     for job in jobs:
         completed += 1
         try:
+            # Load resume for this specific job (may use default or job-specific override)
+            resume_path = get_job_resume_path(job)
+            resume_text = resume_path.read_text(encoding="utf-8")
+
             tailored, report = tailor_resume(resume_text, job, profile,
                                              validation_mode=validation_mode)
 
@@ -655,16 +659,20 @@ def run_tailoring(min_score: int = 7, limit: int = 20,
     now = datetime.now(timezone.utc).isoformat()
     _success_statuses = {"approved", "approved_with_judge_warning"}
     for r in results:
+        # Look up the job to get its selected resume path
+        job = next((j for j in jobs if j["url"] == r["url"]), None)
+        selected_path = str(get_job_resume_path(job)) if job else None
+
         if r["status"] in _success_statuses:
             conn.execute(
                 "UPDATE jobs SET tailored_resume_path=?, tailored_at=?, "
-                "tailor_attempts=COALESCE(tailor_attempts,0)+1 WHERE url=?",
-                (r["path"], now, r["url"]),
+                "selected_resume_path=?, tailor_attempts=COALESCE(tailor_attempts,0)+1 WHERE url=?",
+                (r["path"], now, selected_path, r["url"]),
             )
         else:
             conn.execute(
-                "UPDATE jobs SET tailor_attempts=COALESCE(tailor_attempts,0)+1 WHERE url=?",
-                (r["url"],),
+                "UPDATE jobs SET selected_resume_path=?, tailor_attempts=COALESCE(tailor_attempts,0)+1 WHERE url=?",
+                (selected_path, r["url"]),
             )
     conn.commit()
 

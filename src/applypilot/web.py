@@ -18,9 +18,14 @@ from flask import Flask, jsonify, request, render_template, send_file
 from applypilot.config import (
     APP_DIR, PROFILE_PATH, RESUME_PATH, RESUME_PDF_PATH,
     SEARCH_CONFIG_PATH, ENV_PATH, TAILORED_DIR, COVER_LETTER_DIR,
+    RESUMES_DIR, RESUMES_MANIFEST_PATH,
     ensure_dirs, load_env, load_profile,
+    get_resume_path, load_resumes_manifest, migrate_legacy_resume,
 )
 from applypilot.database import init_db, get_connection, get_stats, get_jobs_by_stage
+from applypilot.resume_manager import (
+    assign_resume_to_job, validate_resume_exists, get_default_resume_id, set_default_resume_id,
+)
 
 log = logging.getLogger(__name__)
 
@@ -115,6 +120,8 @@ def _run_pipeline_bg(stages: list[str], min_score: int, workers: int,
 
 @app.route("/")
 def index():
+    # Migrate legacy resume on startup if needed
+    migrate_legacy_resume()
     return render_template("index.html")
 
 
@@ -275,6 +282,185 @@ def api_resume_upload():
 
     else:
         return jsonify({"error": f"Unsupported file type: {ext}. Use .txt or .pdf"}), 400
+
+
+# ─── Multiple Resume Management ──────────────────────────────────────────
+
+@app.route("/api/resumes", methods=["GET"])
+def api_resumes_list():
+    """List all available resumes with metadata."""
+    migrate_legacy_resume()
+    manifest = load_resumes_manifest()
+    return jsonify({
+        "default_resume_id": manifest.get("default_resume_id", "default"),
+        "resumes": manifest.get("resumes", []),
+    })
+
+
+@app.route("/api/resumes", methods=["POST"])
+def api_resumes_upload():
+    """Upload a new named resume."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"error": "Empty filename"}), 400
+
+    resume_name = request.form.get("resume_name", Path(f.filename).stem)
+    resume_desc = request.form.get("resume_description", "")
+    tags = request.form.get("resume_tags", "")
+
+    ext = Path(f.filename).suffix.lower()
+    if ext not in [".txt", ".pdf"]:
+        return jsonify({"error": f"Unsupported file type: {ext}"}), 400
+
+    ensure_dirs()
+
+    # Create directory for resume
+    resume_id = resume_name.lower().replace(" ", "-")
+    resume_dir = RESUMES_DIR / resume_id
+    resume_dir.mkdir(parents=True, exist_ok=True)
+
+    # Extract text and save
+    if ext == ".txt":
+        content = f.read().decode("utf-8", errors="replace")
+        (resume_dir / "resume.txt").write_text(content, encoding="utf-8")
+        text_preview = content[:200]
+    else:  # PDF
+        pdf_bytes = f.read()
+        (resume_dir / "resume.pdf").write_bytes(pdf_bytes)
+        try:
+            from pypdf import PdfReader
+            import io
+            reader = PdfReader(io.BytesIO(pdf_bytes))
+            content = "\n".join(page.extract_text() or "" for page in reader.pages)
+            (resume_dir / "resume.txt").write_text(content, encoding="utf-8")
+            text_preview = content[:200]
+        except Exception as e:
+            text_preview = f"[PDF uploaded, text extraction failed: {e}]"
+
+    # Create metadata
+    import json
+    from datetime import datetime, timezone
+    info = {
+        "id": resume_id,
+        "name": resume_name,
+        "description": resume_desc,
+        "path": str(resume_dir / "resume.txt"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "tags": [t.strip() for t in tags.split(",") if t.strip()],
+        "is_default": False,
+    }
+    (resume_dir / "info.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
+
+    # Update manifest
+    manifest = load_resumes_manifest()
+    if "resumes" not in manifest:
+        manifest["resumes"] = []
+    # Remove if exists (update)
+    manifest["resumes"] = [r for r in manifest["resumes"] if r.get("id") != resume_id]
+    manifest["resumes"].append(info)
+    RESUMES_MANIFEST_PATH.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    return jsonify({
+        "status": "uploaded",
+        "resume_id": resume_id,
+        "name": resume_name,
+        "text_preview": text_preview,
+    })
+
+
+@app.route("/api/resumes/<resume_id>", methods=["GET"])
+def api_resume_detail(resume_id):
+    """Get resume content and metadata."""
+    if not validate_resume_exists(resume_id):
+        return jsonify({"error": "Resume not found"}), 404
+
+    resume_path = get_resume_path(resume_id)
+    manifest = load_resumes_manifest()
+    resume_info = next((r for r in manifest.get("resumes", []) if r.get("id") == resume_id), None)
+
+    try:
+        text = resume_path.read_text(encoding="utf-8")
+    except Exception as e:
+        return jsonify({"error": f"Failed to read resume: {e}"}), 500
+
+    return jsonify({
+        "id": resume_id,
+        "info": resume_info,
+        "text": text,
+        "length": len(text),
+    })
+
+
+@app.route("/api/resumes/<resume_id>", methods=["DELETE"])
+def api_resume_delete(resume_id):
+    """Delete a resume (prevent deleting 'default')."""
+    if resume_id == "default":
+        return jsonify({"error": "Cannot delete the default resume"}), 400
+
+    import shutil
+    resume_dir = RESUMES_DIR / resume_id
+    if resume_dir.exists():
+        shutil.rmtree(resume_dir)
+
+    # Update manifest
+    manifest = load_resumes_manifest()
+    manifest["resumes"] = [r for r in manifest.get("resumes", []) if r.get("id") != resume_id]
+    RESUMES_MANIFEST_PATH.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    return jsonify({"status": "deleted", "resume_id": resume_id})
+
+
+@app.route("/api/resumes/<resume_id>/set-default", methods=["POST"])
+def api_resume_set_default(resume_id):
+    """Set default resume for auto-selection."""
+    if not validate_resume_exists(resume_id):
+        return jsonify({"error": "Resume not found"}), 404
+
+    set_default_resume_id(resume_id)
+    return jsonify({"status": "set", "default_resume_id": resume_id})
+
+
+@app.route("/api/job/<path:url>/resume", methods=["GET"])
+def api_job_resume_get(url):
+    """Get currently selected resume for a job."""
+    conn = get_connection()
+    job = conn.execute("SELECT resume_id, resume_selection_method, selected_resume_path FROM jobs WHERE url=?", (url,)).fetchone()
+
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    return jsonify({
+        "resume_id": job[0] or "default",
+        "selection_method": job[1] or "auto",
+        "selected_resume_path": job[2],
+    })
+
+
+@app.route("/api/job/<path:url>/resume", methods=["POST"])
+def api_job_resume_set(url):
+    """Override resume selection for a specific job."""
+    data = request.get_json() or {}
+    resume_id = data.get("resume_id", "default")
+
+    if not validate_resume_exists(resume_id):
+        return jsonify({"error": f"Resume '{resume_id}' not found"}), 404
+
+    conn = get_connection()
+    job = conn.execute("SELECT url FROM jobs WHERE url=?", (url,)).fetchone()
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    assign_resume_to_job(conn, url, resume_id, override=True)
+
+    return jsonify({
+        "status": "assigned",
+        "url": url,
+        "resume_id": resume_id,
+        "selection_method": "override",
+    })
 
 
 @app.route("/api/env", methods=["GET"])

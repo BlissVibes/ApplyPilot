@@ -1,0 +1,100 @@
+"""Resume management: load, select, validate per-job resume selection."""
+
+import sqlite3
+from pathlib import Path
+
+from applypilot.config import get_resume_path, load_resumes_manifest
+
+
+def get_job_resume_id(job: dict, default_id: str = "default") -> str:
+    """Get the resume ID to use for a job.
+
+    Selection priority:
+    1. Job's explicit override (resume_id if selection_method == 'override')
+    2. Job's resume_id (if auto-assigned)
+    3. User's default resume
+
+    Args:
+        job: Job dict with possible resume_id and resume_selection_method fields.
+        default_id: Default resume ID to fall back to.
+
+    Returns:
+        Resume ID to use for this job.
+    """
+    if job.get("resume_selection_method") == "override":
+        return job.get("resume_id", default_id)
+    if job.get("resume_id"):
+        return job["resume_id"]
+    return default_id
+
+
+def get_job_resume_path(job: dict) -> Path:
+    """Get the resume file path for a job.
+
+    Args:
+        job: Job dict with resume_id field.
+
+    Returns:
+        Path to the resume text file.
+    """
+    resume_id = get_job_resume_id(job)
+    return get_resume_path(resume_id)
+
+
+def assign_resume_to_job(
+    conn: sqlite3.Connection,
+    url: str,
+    resume_id: str,
+    override: bool = False,
+) -> None:
+    """Assign a resume to a job.
+
+    Args:
+        conn: Database connection.
+        url: Job URL (primary key).
+        resume_id: Resume ID to assign.
+        override: If True, marks this as a manual override. If False, auto-assignment.
+    """
+    method = "override" if override else "auto"
+    conn.execute(
+        "UPDATE jobs SET resume_id=?, resume_selection_method=? WHERE url=?",
+        (resume_id, method, url),
+    )
+    conn.commit()
+
+
+def validate_resume_exists(resume_id: str) -> bool:
+    """Check if a resume exists.
+
+    Args:
+        resume_id: Resume ID to validate.
+
+    Returns:
+        True if the resume file exists.
+    """
+    path = get_resume_path(resume_id)
+    return path.exists()
+
+
+def get_default_resume_id() -> str:
+    """Get the default resume ID from manifest.
+
+    Returns:
+        The default resume ID, or 'default' if not configured.
+    """
+    manifest = load_resumes_manifest()
+    return manifest.get("default_resume_id", "default")
+
+
+def set_default_resume_id(resume_id: str) -> None:
+    """Set the default resume ID in manifest.
+
+    Args:
+        resume_id: Resume ID to set as default.
+    """
+    import json
+    from applypilot.config import RESUMES_MANIFEST_PATH
+
+    manifest = load_resumes_manifest()
+    manifest["default_resume_id"] = resume_id
+    RESUMES_MANIFEST_PATH.write_text(json.dumps(manifest, indent=2), encoding="utf-8")

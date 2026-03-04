@@ -13,6 +13,8 @@ DB_PATH = APP_DIR / "applypilot.db"
 PROFILE_PATH = APP_DIR / "profile.json"
 RESUME_PATH = APP_DIR / "resume.txt"
 RESUME_PDF_PATH = APP_DIR / "resume.pdf"
+RESUMES_DIR = APP_DIR / "resumes"
+RESUMES_MANIFEST_PATH = APP_DIR / "resumes.json"
 SEARCH_CONFIG_PATH = APP_DIR / "searches.yaml"
 ENV_PATH = APP_DIR / ".env"
 
@@ -87,7 +89,7 @@ def get_chrome_user_data() -> Path:
 
 def ensure_dirs():
     """Create all required directories."""
-    for d in [APP_DIR, TAILORED_DIR, COVER_LETTER_DIR, LOG_DIR, CHROME_WORKER_DIR, APPLY_WORKER_DIR]:
+    for d in [APP_DIR, TAILORED_DIR, COVER_LETTER_DIR, LOG_DIR, CHROME_WORKER_DIR, APPLY_WORKER_DIR, RESUMES_DIR]:
         d.mkdir(parents=True, exist_ok=True)
 
 
@@ -178,6 +180,99 @@ def load_env():
         load_dotenv(ENV_PATH)
     # Also try CWD .env as fallback
     load_dotenv()
+
+
+# ---------------------------------------------------------------------------
+# Resume management
+# ---------------------------------------------------------------------------
+
+def load_resumes_manifest() -> dict:
+    """Load resume manifest from resumes.json.
+
+    Returns:
+        Dict with 'default_resume_id' and 'resumes' list, or empty dict if not found.
+    """
+    import json
+    if RESUMES_MANIFEST_PATH.exists():
+        try:
+            return json.loads(RESUMES_MANIFEST_PATH.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, IOError):
+            return {}
+    return {}
+
+
+def get_resume_path(resume_id: str = "default") -> Path:
+    """Get the file path for a resume by ID.
+
+    Args:
+        resume_id: Resume identifier (e.g., 'default', 'python-lead')
+
+    Returns:
+        Path to the resume text file.
+    """
+    # Try structured directory first
+    structured = RESUMES_DIR / resume_id / "resume.txt"
+    if structured.exists():
+        return structured
+
+    # Fallback to legacy resume.txt for 'default'
+    if resume_id == "default" and RESUME_PATH.exists():
+        return RESUME_PATH
+
+    # If neither exists, return the structured path anyway
+    return structured
+
+
+def list_available_resumes() -> list[dict]:
+    """List all available resumes from manifest.
+
+    Returns:
+        List of resume metadata dicts from the manifest.
+    """
+    manifest = load_resumes_manifest()
+    return manifest.get("resumes", [])
+
+
+def migrate_legacy_resume() -> None:
+    """Migrate legacy resume.txt to structured resumes/default/ format.
+
+    Safe to call multiple times — only migrates if legacy file exists and
+    structured directory doesn't.
+    """
+    if not RESUME_PATH.exists():
+        return
+    if (RESUMES_DIR / "default").exists():
+        return
+
+    import json
+    from datetime import datetime, timezone
+
+    # Create directory
+    default_dir = RESUMES_DIR / "default"
+    default_dir.mkdir(parents=True, exist_ok=True)
+
+    # Copy resume
+    resume_text = RESUME_PATH.read_text(encoding="utf-8")
+    (default_dir / "resume.txt").write_text(resume_text, encoding="utf-8")
+
+    # Create metadata
+    info = {
+        "id": "default",
+        "name": "Default Resume",
+        "description": "Master resume (migrated from legacy)",
+        "path": str(default_dir / "resume.txt"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "tags": ["default", "general"],
+        "is_default": True,
+    }
+    (default_dir / "info.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
+
+    # Update manifest
+    manifest = {
+        "default_resume_id": "default",
+        "resumes": [info],
+    }
+    RESUMES_MANIFEST_PATH.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------

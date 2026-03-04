@@ -114,6 +114,9 @@ def init_db(db_path: Path | str | None = None) -> sqlite3.Connection:
             tailored_resume_path  TEXT,
             tailored_at           TEXT,
             tailor_attempts       INTEGER DEFAULT 0,
+            resume_id             TEXT DEFAULT 'default',
+            resume_selection_method TEXT DEFAULT 'auto',
+            selected_resume_path  TEXT,
 
             -- Cover letter stage
             cover_letter_path     TEXT,
@@ -166,6 +169,9 @@ _ALL_COLUMNS: dict[str, str] = {
     "tailored_resume_path": "TEXT",
     "tailored_at": "TEXT",
     "tailor_attempts": "INTEGER DEFAULT 0",
+    "resume_id": "TEXT DEFAULT 'default'",
+    "resume_selection_method": "TEXT DEFAULT 'auto'",
+    "selected_resume_path": "TEXT",
     # Cover letter
     "cover_letter_path": "TEXT",
     "cover_letter_at": "TEXT",

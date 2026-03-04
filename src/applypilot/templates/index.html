@@ -222,6 +222,7 @@ textarea { min-height:100px; resize:vertical; }
 
     <div class="tabs">
       <div class="tab active" onclick="showSetupTab('resume')">Resume Upload</div>
+      <div class="tab" onclick="showSetupTab('resumes')">Manage Resumes</div>
       <div class="tab" onclick="showSetupTab('apikeys')">API Keys</div>
       <div class="tab" onclick="showSetupTab('profile')">Profile</div>
       <div class="tab" onclick="showSetupTab('doctor')">Doctor</div>
@@ -239,6 +240,44 @@ textarea { min-height:100px; resize:vertical; }
       </div>
       <div id="resume-status" style="margin-top:12px;"></div>
       <div id="current-resume" style="margin-top:16px;"></div>
+    </div>
+
+    <!-- Manage Resumes -->
+    <div id="setup-resumes" class="setup-tab" style="display:none;">
+      <h2>Manage Multiple Resumes</h2>
+      <p style="color:var(--text-dim);margin-bottom:16px;">Upload and manage multiple resume versions for different job types. Set a default and optionally assign specific resumes to jobs.</p>
+
+      <!-- Resume Upload -->
+      <div style="margin-bottom:24px;">
+        <h3 style="margin-top:0;">Add New Resume</h3>
+        <div style="max-width:500px;">
+          <div class="form-group">
+            <label>Resume Name</label>
+            <input type="text" id="new-resume-name" placeholder="e.g., 'Python Tech Lead'">
+          </div>
+          <div class="form-group">
+            <label>Description (optional)</label>
+            <input type="text" id="new-resume-desc" placeholder="e.g., 'For backend/leadership roles'">
+          </div>
+          <div class="form-group">
+            <label>Tags (comma-separated, optional)</label>
+            <input type="text" id="new-resume-tags" placeholder="e.g., python,backend,leadership">
+          </div>
+          <div class="upload-area" id="upload-area-multi" onclick="document.getElementById('resume-file-multi').click()" style="margin:12px 0;">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p>Drop resume here or click to browse</p>
+            <p style="font-size:12px;">.txt or .pdf files accepted</p>
+            <input type="file" id="resume-file-multi" accept=".txt,.pdf" onchange="uploadResumeMulti(this)">
+          </div>
+        </div>
+        <div id="multi-resume-status" style="margin-top:12px;"></div>
+      </div>
+
+      <!-- Available Resumes List -->
+      <div style="margin-bottom:24px;">
+        <h3>Available Resumes</h3>
+        <div id="resumes-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;"></div>
+      </div>
     </div>
 
     <!-- API Keys -->
@@ -630,6 +669,7 @@ function showSetupTab(name) {
   if (name === 'doctor') loadDoctor();
   if (name === 'apikeys') loadEnvKeys();
   if (name === 'profile') loadProfile();
+  if (name === 'resumes') loadResumesList();
 }
 
 function showFilesTab(name) {
@@ -801,14 +841,95 @@ async function showJobDetail(url) {
     ${job.cover_letter_path ? `<div style="margin-bottom:8px;"><strong>Cover Letter:</strong> <button class="btn btn-secondary btn-sm" onclick="viewFile('${esc(job.cover_letter_path)}')">View</button></div>` : ''}
     ${job.apply_status ? `<div style="margin-bottom:8px;"><strong>Apply Status:</strong> ${esc(job.apply_status)}</div>` : ''}
     ${job.apply_error ? `<div style="margin-bottom:8px;color:var(--red);"><strong>Apply Error:</strong> ${esc(job.apply_error)}</div>` : ''}
+    <div id="job-resume-selector-${esc(url.replace(/[^a-z0-9]/gi, '_'))}" style="margin-bottom:16px;"></div>
     <h3>Description</h3>
     <pre style="white-space:pre-wrap;font-size:12px;max-height:300px;overflow-y:auto;background:var(--surface2);padding:12px;border-radius:6px;">${esc(job.full_description || job.description || 'No description available')}</pre>
   `;
 
+  // Load resume selector after modal is shown
+  loadJobResumeSelector(url);
   document.getElementById('job-modal').classList.add('show');
 }
 
 function closeJobModal() { document.getElementById('job-modal').classList.remove('show'); }
+
+async function loadJobResumeSelector(url) {
+  const jobResume = await api('/api/job/' + encodeURIComponent(url) + '/resume');
+  const resumesData = await api('/api/resumes');
+
+  const selectorId = 'job-resume-selector-' + url.replace(/[^a-z0-9]/gi, '_');
+  const div = document.getElementById(selectorId);
+
+  if (!div || !resumesData.resumes) return;
+
+  const currentResume = jobResume.resume_id || 'default';
+  const isOverride = jobResume.selection_method === 'override';
+
+  let html = `
+    <div style="background:var(--surface2);padding:12px;border-radius:6px;border:1px solid var(--border);">
+      <strong style="display:block;margin-bottom:8px;">Resume for This Job</strong>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="resume-select-${esc(url.replace(/[^a-z0-9]/gi, '_'))}" style="flex:1;">
+  `;
+
+  // Add auto option
+  html += `<option value="auto">Use Default</option>`;
+
+  // Add all resumes
+  resumesData.resumes.forEach(resume => {
+    const selected = currentResume === resume.id ? 'selected' : '';
+    html += `<option value="${esc(resume.id)}" ${selected}>${esc(resume.name)}</option>`;
+  });
+
+  html += `
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="setJobResume('${esc(url)}')">Apply</button>
+      </div>
+      <p style="margin:8px 0 0 0;font-size:11px;color:var(--text-dim);">
+        ${isOverride ? 'Custom selection for this job' : 'Using default resume'}
+      </p>
+    </div>
+  `;
+
+  div.innerHTML = html;
+}
+
+async function setJobResume(url) {
+  const selectorId = 'resume-select-' + url.replace(/[^a-z0-9]/gi, '_');
+  const select = document.getElementById(selectorId);
+  if (!select) return;
+
+  const resumeId = select.value;
+  if (resumeId === 'auto') {
+    // Reset to default (remove override)
+    // We need an endpoint to reset, for now just use the set endpoint with 'default'
+    const r = await fetch('/api/job/' + encodeURIComponent(url) + '/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume_id: 'default' })
+    });
+    const data = await r.json();
+    if (data.error) {
+      toast(data.error, 'err');
+    } else {
+      toast('Resume reset to default');
+      loadJobResumeSelector(url);
+    }
+  } else {
+    const r = await fetch('/api/job/' + encodeURIComponent(url) + '/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume_id: resumeId })
+    });
+    const data = await r.json();
+    if (data.error) {
+      toast(data.error, 'err');
+    } else {
+      toast(`Assigned ${resumeId} to this job`);
+      loadJobResumeSelector(url);
+    }
+  }
+}
 
 // ── Resume Upload ───────────────────────────────────────────────────
 const uploadArea = document.getElementById('upload-area');
@@ -821,6 +942,20 @@ if (uploadArea) {
     if (e.dataTransfer.files.length) {
       document.getElementById('resume-file').files = e.dataTransfer.files;
       uploadResume(document.getElementById('resume-file'));
+    }
+  });
+}
+
+const uploadAreaMulti = document.getElementById('upload-area-multi');
+if (uploadAreaMulti) {
+  uploadAreaMulti.addEventListener('dragover', e => { e.preventDefault(); uploadAreaMulti.classList.add('dragover'); });
+  uploadAreaMulti.addEventListener('dragleave', () => uploadAreaMulti.classList.remove('dragover'));
+  uploadAreaMulti.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadAreaMulti.classList.remove('dragover');
+    if (e.dataTransfer.files.length) {
+      document.getElementById('resume-file-multi').files = e.dataTransfer.files;
+      uploadResumeMulti(document.getElementById('resume-file-multi'));
     }
   });
 }
@@ -858,6 +993,134 @@ async function loadResumeStatus() {
     `;
   } else {
     div.innerHTML = '<p style="color:var(--text-dim)">No resume uploaded yet.</p>';
+  }
+}
+
+// ── Multiple Resume Management ────────────────────────────────────────
+
+async function uploadResumeMulti(input) {
+  if (!input.files.length) return;
+  const file = input.files[0];
+  const name = document.getElementById('new-resume-name').value;
+  const desc = document.getElementById('new-resume-desc').value;
+  const tags = document.getElementById('new-resume-tags').value;
+
+  if (!name) {
+    toast('Please enter a resume name', 'err');
+    return;
+  }
+
+  const form = new FormData();
+  form.append('file', file);
+  form.append('resume_name', name);
+  form.append('resume_description', desc);
+  form.append('resume_tags', tags);
+
+  const status = document.getElementById('multi-resume-status');
+  status.innerHTML = '<span style="color:var(--accent)">Uploading...</span>';
+
+  const r = await fetch('/api/resumes', { method: 'POST', body: form });
+  const data = await r.json();
+
+  if (data.error) {
+    status.innerHTML = `<span style="color:var(--red)">${esc(data.error)}</span>`;
+    toast(data.error, 'err');
+  } else {
+    status.innerHTML = `<span style="color:var(--green)">Uploaded: ${esc(data.name)}</span>`;
+    document.getElementById('new-resume-name').value = '';
+    document.getElementById('new-resume-desc').value = '';
+    document.getElementById('new-resume-tags').value = '';
+    toast('Resume added!');
+    loadResumesList();
+  }
+  input.value = '';
+}
+
+async function loadResumesList() {
+  const data = await api('/api/resumes');
+  const list = document.getElementById('resumes-list');
+  list.innerHTML = '';
+
+  if (!data.resumes || data.resumes.length === 0) {
+    list.innerHTML = '<p style="color:var(--text-dim)">No resumes uploaded yet.</p>';
+    return;
+  }
+
+  data.resumes.forEach(resume => {
+    const isDefault = resume.id === data.default_resume_id;
+    const card = document.createElement('div');
+    card.style.cssText = `
+      background:var(--surface2);
+      border:1px solid var(--border);
+      border-radius:8px;
+      padding:16px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    `;
+
+    const tags = (resume.tags || []).join(', ');
+    card.innerHTML = `
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
+          <div>
+            <h4 style="margin:0;margin-bottom:4px;">${esc(resume.name)}</h4>
+            <p style="margin:0;font-size:12px;color:var(--text-dim);">${esc(resume.description || 'No description')}</p>
+          </div>
+          ${isDefault ? '<span style="background:var(--accent);color:var(--surface);padding:4px 8px;border-radius:4px;font-size:11px;font-weight:bold;">DEFAULT</span>' : ''}
+        </div>
+        ${tags ? `<p style="margin:0;font-size:11px;color:var(--accent);">Tags: ${esc(tags)}</p>` : ''}
+        <p style="margin:0;font-size:11px;color:var(--text-dim);">Created: ${new Date(resume.created_at).toLocaleDateString()}</p>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-sm btn-secondary" onclick="viewResume('${esc(resume.id)}')">View</button>
+        ${!isDefault ? `<button class="btn btn-sm btn-secondary" onclick="setDefaultResume('${esc(resume.id)}')">Set Default</button>` : ''}
+        ${resume.id !== 'default' ? `<button class="btn btn-sm" style="background:var(--red);color:white;" onclick="deleteResume('${esc(resume.id)}')">Delete</button>` : ''}
+      </div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+async function viewResume(resumeId) {
+  const data = await api(`/api/resumes/${resumeId}`);
+  if (data.error) {
+    toast(data.error, 'err');
+    return;
+  }
+
+  const modal = document.getElementById('modal');
+  const header = document.getElementById('modal-header');
+  const body = document.getElementById('modal-body');
+
+  header.textContent = `${esc(data.info.name)} (${data.length} characters)`;
+  body.innerHTML = `
+    <pre style="background:var(--surface2);padding:12px;border-radius:6px;font-size:12px;max-height:500px;overflow-y:auto;white-space:pre-wrap;">${esc(data.text)}</pre>
+  `;
+  modal.classList.add('show');
+}
+
+async function setDefaultResume(resumeId) {
+  const r = await fetch(`/api/resumes/${resumeId}/set-default`, { method: 'POST' });
+  const data = await r.json();
+  if (data.error) {
+    toast(data.error, 'err');
+  } else {
+    toast(`${resumeId} is now the default resume`);
+    loadResumesList();
+  }
+}
+
+async function deleteResume(resumeId) {
+  if (!confirm(`Delete resume "${resumeId}"?`)) return;
+
+  const r = await fetch(`/api/resumes/${resumeId}`, { method: 'DELETE' });
+  const data = await r.json();
+  if (data.error) {
+    toast(data.error, 'err');
+  } else {
+    toast('Resume deleted');
+    loadResumesList();
   }
 }
 
