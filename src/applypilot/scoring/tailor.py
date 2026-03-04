@@ -17,7 +17,10 @@ from datetime import datetime, timezone
 
 from applypilot.config import TAILORED_DIR, load_profile
 from applypilot.database import get_connection, get_jobs_by_stage
-from applypilot.resume_manager import get_job_resume_path
+from applypilot.resume_manager import (
+    get_job_resume_path, get_matching_resumes, has_resume_conflict,
+    queue_conflict, is_conflict_queued,
+)
 from applypilot.llm import get_client, get_haiku_client
 from applypilot.scoring.validator import (
     BANNED_WORDS,
@@ -578,10 +581,25 @@ def run_tailoring(min_score: int = 7, limit: int = 20,
     t0 = time.time()
     completed = 0
     results: list[dict] = []
-    stats: dict[str, int] = {"approved": 0, "failed_validation": 0, "failed_judge": 0, "error": 0}
+    stats: dict[str, int] = {"approved": 0, "failed_validation": 0, "failed_judge": 0, "error": 0, "queued": 0}
 
     for job in jobs:
         completed += 1
+
+        # Check for resume conflicts: if 2+ resumes match and no override,
+        # queue for user review instead of proceeding with an ambiguous choice.
+        if job.get("resume_selection_method") != "override" and not is_conflict_queued(conn, job["url"]):
+            job_title = (job.get("title") or "").lower()
+            if job_title and has_resume_conflict(job_title):
+                matches = get_matching_resumes(job_title)
+                queue_conflict(conn, job["url"], job.get("title", ""), matches)
+                stats["queued"] = stats.get("queued", 0) + 1
+                log.info(
+                    "%d/%d [QUEUED] %d resume conflict for: %s",
+                    completed, len(jobs), len(matches), job["title"][:40],
+                )
+                continue
+
         try:
             # Load resume for this specific job (may use default or job-specific override)
             resume_path = get_job_resume_path(job)
@@ -677,18 +695,21 @@ def run_tailoring(min_score: int = 7, limit: int = 20,
     conn.commit()
 
     elapsed = time.time() - t0
+    queued = stats.get("queued", 0)
     log.info(
-        "Tailoring done in %.1fs: %d approved, %d failed_validation, %d failed_judge, %d errors",
+        "Tailoring done in %.1fs: %d approved, %d failed_validation, %d failed_judge, %d errors, %d queued for review",
         elapsed,
         stats.get("approved", 0),
         stats.get("failed_validation", 0),
         stats.get("failed_judge", 0),
         stats.get("error", 0),
+        queued,
     )
 
     return {
         "approved": stats.get("approved", 0),
         "failed": stats.get("failed_validation", 0) + stats.get("failed_judge", 0),
         "errors": stats.get("error", 0),
+        "queued": queued,
         "elapsed": elapsed,
     }

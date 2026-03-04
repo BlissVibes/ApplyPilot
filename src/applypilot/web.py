@@ -26,6 +26,8 @@ from applypilot.database import init_db, get_connection, get_stats, get_jobs_by_
 from applypilot.resume_manager import (
     assign_resume_to_job, validate_resume_exists, get_default_resume_id, set_default_resume_id,
     set_job_title_keywords, get_job_title_keywords, get_matching_resumes,
+    get_pending_conflicts, get_resolved_conflicts, resolve_conflict,
+    get_recommendation,
 )
 
 log = logging.getLogger(__name__)
@@ -526,6 +528,139 @@ def api_job_resume_matches(url):
         "matches": matches,
         "match_count": len(matches),
         "primary_match": matches[0]["resume_id"] if matches else None,
+    })
+
+
+# ─── Resume Conflict Queue ────────────────────────────────────────────
+
+@app.route("/api/resume-queue", methods=["GET"])
+def api_resume_queue():
+    """Get pending resume conflicts that need user review."""
+    conn = get_connection()
+    pending = get_pending_conflicts(conn)
+    return jsonify({
+        "pending": pending,
+        "count": len(pending),
+    })
+
+
+@app.route("/api/resume-queue/history", methods=["GET"])
+def api_resume_queue_history():
+    """Get recently resolved conflicts."""
+    limit = request.args.get("limit", 50, type=int)
+    conn = get_connection()
+    resolved = get_resolved_conflicts(conn, limit=limit)
+    return jsonify({
+        "resolved": resolved,
+        "count": len(resolved),
+    })
+
+
+@app.route("/api/resume-queue/<path:url>/resolve", methods=["POST"])
+def api_resume_queue_resolve(url):
+    """User resolves a conflict by choosing a resume for the job."""
+    data = request.get_json() or {}
+    resume_id = data.get("resume_id")
+
+    if not resume_id:
+        return jsonify({"error": "resume_id is required"}), 400
+
+    if not validate_resume_exists(resume_id):
+        return jsonify({"error": f"Resume '{resume_id}' not found"}), 404
+
+    conn = get_connection()
+
+    # Verify the conflict exists
+    row = conn.execute(
+        "SELECT url FROM resume_conflict_queue WHERE url=? AND resolved_at IS NULL",
+        (url,),
+    ).fetchone()
+    if not row:
+        return jsonify({"error": "No pending conflict found for this job"}), 404
+
+    resolve_conflict(conn, url, resume_id)
+
+    return jsonify({
+        "status": "resolved",
+        "url": url,
+        "chosen_resume_id": resume_id,
+    })
+
+
+@app.route("/api/resume-queue/<path:url>/skip", methods=["POST"])
+def api_resume_queue_skip(url):
+    """Skip a conflict by accepting the system's top match (specificity-based)."""
+    conn = get_connection()
+
+    row = conn.execute(
+        "SELECT matches_json FROM resume_conflict_queue WHERE url=? AND resolved_at IS NULL",
+        (url,),
+    ).fetchone()
+    if not row:
+        return jsonify({"error": "No pending conflict found for this job"}), 404
+
+    import json as _json
+    matches = _json.loads(row[0]) if row[0] else []
+    if not matches:
+        return jsonify({"error": "No matches to auto-select from"}), 400
+
+    # Use the top match (most specific)
+    top_resume_id = matches[0]["resume_id"]
+    resolve_conflict(conn, url, top_resume_id)
+
+    return jsonify({
+        "status": "resolved",
+        "url": url,
+        "chosen_resume_id": top_resume_id,
+        "method": "auto_specificity",
+    })
+
+
+@app.route("/api/resume-queue/resolve-all", methods=["POST"])
+def api_resume_queue_resolve_all():
+    """Resolve all pending conflicts using recommendations or top specificity match."""
+    data = request.get_json() or {}
+    method = data.get("method", "recommendation")  # "recommendation" or "specificity"
+
+    conn = get_connection()
+    pending = get_pending_conflicts(conn)
+    resolved_count = 0
+
+    for conflict in pending:
+        url = conflict["url"]
+        matches = conflict["matches"]
+        if not matches:
+            continue
+
+        if method == "recommendation" and conflict["recommendation_id"]:
+            chosen = conflict["recommendation_id"]
+        else:
+            chosen = matches[0]["resume_id"]  # top specificity
+
+        resolve_conflict(conn, url, chosen)
+        resolved_count += 1
+
+    return jsonify({
+        "status": "resolved_all",
+        "method": method,
+        "resolved_count": resolved_count,
+    })
+
+
+@app.route("/api/resume-recommendation")
+def api_resume_recommendation():
+    """Get a resume recommendation for a given job title."""
+    job_title = request.args.get("job_title", "")
+    if not job_title:
+        return jsonify({"error": "job_title parameter required"}), 400
+
+    conn = get_connection()
+    rec_id, confidence = get_recommendation(conn, job_title)
+
+    return jsonify({
+        "job_title": job_title,
+        "recommendation_id": rec_id,
+        "confidence": confidence,
     })
 
 

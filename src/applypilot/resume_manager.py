@@ -1,9 +1,19 @@
-"""Resume management: load, select, validate per-job resume selection."""
+"""Resume management: load, select, validate per-job resume selection.
 
+Includes conflict queue management and a learning system that recommends
+resumes for jobs based on past manual selections.
+"""
+
+import json
+import logging
 import sqlite3
+from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 
 from applypilot.config import get_resume_path, load_resumes_manifest
+
+log = logging.getLogger(__name__)
 
 
 def get_job_resume_id(job: dict, default_id: str = "default") -> str:
@@ -242,3 +252,233 @@ def get_matching_resumes(job_title: str) -> list[dict]:
     matches.sort(key=lambda m: m["keyword_length"], reverse=True)
 
     return matches
+
+
+# ---------------------------------------------------------------------------
+# Conflict Queue Management
+# ---------------------------------------------------------------------------
+
+def has_resume_conflict(job_title: str) -> bool:
+    """Check if a job title triggers a resume conflict (2+ resumes match)."""
+    return len(get_matching_resumes(job_title)) >= 2
+
+
+def queue_conflict(
+    conn: sqlite3.Connection,
+    url: str,
+    job_title: str,
+    matches: list[dict],
+) -> None:
+    """Add a job to the conflict queue for user review.
+
+    Args:
+        conn: Database connection.
+        url: Job URL (primary key).
+        job_title: Job title text.
+        matches: List of matching resume dicts from get_matching_resumes().
+    """
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Get recommendation from learning system
+    rec_id, rec_confidence = get_recommendation(conn, job_title)
+
+    conn.execute(
+        """INSERT OR REPLACE INTO resume_conflict_queue
+           (url, job_title, matches_json, match_count, queued_at,
+            recommendation_id, recommendation_confidence)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (url, job_title, json.dumps(matches), len(matches), now,
+         rec_id, rec_confidence),
+    )
+    conn.commit()
+    log.info("Queued resume conflict for '%s' (%d matches)", job_title[:40], len(matches))
+
+
+def resolve_conflict(
+    conn: sqlite3.Connection,
+    url: str,
+    chosen_resume_id: str,
+) -> None:
+    """User resolves a conflict by picking a resume.
+
+    This also records the selection for future learning.
+
+    Args:
+        conn: Database connection.
+        url: Job URL.
+        chosen_resume_id: Resume ID the user selected.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Get the conflict record for learning data
+    row = conn.execute(
+        "SELECT job_title, matches_json FROM resume_conflict_queue WHERE url=?",
+        (url,),
+    ).fetchone()
+
+    if not row:
+        return
+
+    job_title = row[0]
+    matches = json.loads(row[1]) if row[1] else []
+
+    # Find matched keyword for the chosen resume
+    matched_keyword = ""
+    for m in matches:
+        if m["resume_id"] == chosen_resume_id:
+            matched_keyword = m.get("matched_keyword", "")
+            break
+
+    # Mark conflict as resolved
+    conn.execute(
+        """UPDATE resume_conflict_queue
+           SET resolved_at=?, chosen_resume_id=?
+           WHERE url=?""",
+        (now, chosen_resume_id, url),
+    )
+
+    # Record selection for learning
+    conn.execute(
+        """INSERT INTO resume_selections
+           (job_url, job_title, chosen_resume_id, matched_keyword,
+            all_matches_json, selected_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (url, job_title, chosen_resume_id, matched_keyword,
+         json.dumps(matches), now),
+    )
+
+    # Assign the chosen resume to the job (as override)
+    assign_resume_to_job(conn, url, chosen_resume_id, override=True)
+
+    conn.commit()
+    log.info("Resolved conflict for '%s' → %s", job_title[:40], chosen_resume_id)
+
+
+def get_pending_conflicts(conn: sqlite3.Connection) -> list[dict]:
+    """Get all unresolved conflicts in the queue.
+
+    Returns:
+        List of dicts with url, job_title, matches, match_count,
+        queued_at, recommendation_id, recommendation_confidence.
+    """
+    rows = conn.execute(
+        """SELECT url, job_title, matches_json, match_count, queued_at,
+                  recommendation_id, recommendation_confidence
+           FROM resume_conflict_queue
+           WHERE resolved_at IS NULL
+           ORDER BY queued_at DESC"""
+    ).fetchall()
+
+    results = []
+    for row in rows:
+        results.append({
+            "url": row[0],
+            "job_title": row[1],
+            "matches": json.loads(row[2]) if row[2] else [],
+            "match_count": row[3],
+            "queued_at": row[4],
+            "recommendation_id": row[5],
+            "recommendation_confidence": row[6] or 0.0,
+        })
+    return results
+
+
+def get_resolved_conflicts(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
+    """Get recently resolved conflicts (for review/history)."""
+    rows = conn.execute(
+        """SELECT url, job_title, matches_json, match_count, queued_at,
+                  resolved_at, chosen_resume_id,
+                  recommendation_id, recommendation_confidence
+           FROM resume_conflict_queue
+           WHERE resolved_at IS NOT NULL
+           ORDER BY resolved_at DESC LIMIT ?""",
+        (limit,),
+    ).fetchall()
+
+    results = []
+    for row in rows:
+        results.append({
+            "url": row[0],
+            "job_title": row[1],
+            "matches": json.loads(row[2]) if row[2] else [],
+            "match_count": row[3],
+            "queued_at": row[4],
+            "resolved_at": row[5],
+            "chosen_resume_id": row[6],
+            "recommendation_id": row[7],
+            "recommendation_confidence": row[8] or 0.0,
+        })
+    return results
+
+
+def is_conflict_queued(conn: sqlite3.Connection, url: str) -> bool:
+    """Check if a job is already in the conflict queue (pending or resolved)."""
+    row = conn.execute(
+        "SELECT 1 FROM resume_conflict_queue WHERE url=?", (url,)
+    ).fetchone()
+    return row is not None
+
+
+# ---------------------------------------------------------------------------
+# Learning / Recommendation System
+# ---------------------------------------------------------------------------
+
+def get_recommendation(
+    conn: sqlite3.Connection,
+    job_title: str,
+) -> tuple[str | None, float]:
+    """Recommend a resume for a job based on past manual selections.
+
+    Looks at all past selections where the job title shares words with
+    this job title, and returns the most frequently chosen resume.
+
+    Args:
+        conn: Database connection.
+        job_title: The job title to get a recommendation for.
+
+    Returns:
+        Tuple of (recommended_resume_id, confidence).
+        confidence is 0.0-1.0 based on how many past selections agree.
+        Returns (None, 0.0) if no data available.
+    """
+    if not job_title:
+        return None, 0.0
+
+    # Get all past selections
+    rows = conn.execute(
+        "SELECT job_title, chosen_resume_id FROM resume_selections"
+    ).fetchall()
+
+    if not rows:
+        return None, 0.0
+
+    title_words = set(job_title.lower().split())
+
+    # Score each past selection by word overlap with current job title
+    weighted_votes: Counter = Counter()
+    total_weight = 0.0
+
+    for row in rows:
+        past_title = (row[0] or "").lower()
+        past_resume = row[1]
+        past_words = set(past_title.split())
+
+        # Jaccard similarity: intersection / union
+        if not past_words or not title_words:
+            continue
+        overlap = len(title_words & past_words)
+        union = len(title_words | past_words)
+        similarity = overlap / union if union > 0 else 0.0
+
+        if similarity > 0.1:  # Minimum threshold
+            weighted_votes[past_resume] += similarity
+            total_weight += similarity
+
+    if not weighted_votes or total_weight == 0:
+        return None, 0.0
+
+    # Most voted resume
+    best_resume, best_weight = weighted_votes.most_common(1)[0]
+    confidence = best_weight / total_weight if total_weight > 0 else 0.0
+
+    return best_resume, round(confidence, 3)
