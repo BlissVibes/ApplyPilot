@@ -421,18 +421,25 @@ textarea { min-height:100px; resize:vertical; }
             <!-- Continents -->
             <div style="margin-bottom:16px;">
               <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;" id="continent-buttons">
-                <button class="btn btn-sm" onclick="toggleContinent('north-america')" style="opacity:.6;">North America</button>
-                <button class="btn btn-sm" onclick="toggleContinent('south-america')" style="opacity:.6;">South America</button>
-                <button class="btn btn-sm" onclick="toggleContinent('europe-north')" style="opacity:.6;">Europe (North)</button>
-                <button class="btn btn-sm" onclick="toggleContinent('europe-east')" style="opacity:.6;">Europe (East)</button>
-                <button class="btn btn-sm" onclick="toggleContinent('europe-south')" style="opacity:.6;">Europe (South)</button>
-                <button class="btn btn-sm" onclick="toggleContinent('europe-west')" style="opacity:.6;">Europe (West)</button>
-                <button class="btn btn-sm" onclick="toggleContinent('africa')" style="opacity:.6;">Africa</button>
-                <button class="btn btn-sm" onclick="toggleContinent('asia-east')" style="opacity:.6;">Asia (East)</button>
-                <button class="btn btn-sm" onclick="toggleContinent('asia-south')" style="opacity:.6;">Asia (South)</button>
-                <button class="btn btn-sm" onclick="toggleContinent('asia-southeast')" style="opacity:.6;">Asia (SE)</button>
-                <button class="btn btn-sm" onclick="toggleContinent('middle-east')" style="opacity:.6;">Middle East</button>
-                <button class="btn btn-sm" onclick="toggleContinent('oceania')" style="opacity:.6;">Oceania</button>
+                <button class="btn btn-sm" id="cb-north-america" onclick="toggleContinent('north-america')">🌎 North America</button>
+                <button class="btn btn-sm" id="cb-central-america" onclick="toggleContinent('central-america')">🌎 Central America</button>
+                <button class="btn btn-sm" id="cb-caribbean" onclick="toggleContinent('caribbean')">🏝️ Caribbean</button>
+                <button class="btn btn-sm" id="cb-south-america" onclick="toggleContinent('south-america')">🌎 South America</button>
+                <button class="btn btn-sm" id="cb-europe-north" onclick="toggleContinent('europe-north')">🌍 Europe (N)</button>
+                <button class="btn btn-sm" id="cb-europe-east" onclick="toggleContinent('europe-east')">🌍 Europe (E)</button>
+                <button class="btn btn-sm" id="cb-europe-south" onclick="toggleContinent('europe-south')">🌍 Europe (S)</button>
+                <button class="btn btn-sm" id="cb-europe-west" onclick="toggleContinent('europe-west')">🌍 Europe (W)</button>
+                <button class="btn btn-sm" id="cb-africa-north" onclick="toggleContinent('africa-north')">🌍 Africa (N)</button>
+                <button class="btn btn-sm" id="cb-africa-west" onclick="toggleContinent('africa-west')">🌍 Africa (W)</button>
+                <button class="btn btn-sm" id="cb-africa-east" onclick="toggleContinent('africa-east')">🌍 Africa (E)</button>
+                <button class="btn btn-sm" id="cb-africa-central" onclick="toggleContinent('africa-central')">🌍 Africa (C)</button>
+                <button class="btn btn-sm" id="cb-africa-south" onclick="toggleContinent('africa-south')">🌍 Africa (S)</button>
+                <button class="btn btn-sm" id="cb-asia-central" onclick="toggleContinent('asia-central')">🌏 Asia (C)</button>
+                <button class="btn btn-sm" id="cb-asia-east" onclick="toggleContinent('asia-east')">🌏 Asia (E)</button>
+                <button class="btn btn-sm" id="cb-asia-south" onclick="toggleContinent('asia-south')">🌏 Asia (S)</button>
+                <button class="btn btn-sm" id="cb-asia-southeast" onclick="toggleContinent('asia-southeast')">🌏 Asia (SE)</button>
+                <button class="btn btn-sm" id="cb-middle-east" onclick="toggleContinent('middle-east')">🕌 Middle East</button>
+                <button class="btn btn-sm" id="cb-oceania" onclick="toggleContinent('oceania')">🌏 Oceania</button>
               </div>
             </div>
 
@@ -1189,24 +1196,70 @@ async function loadDoctor() {
   document.getElementById('doctor-results').innerHTML = html;
 }
 
-// ── Global Remote Locations Data ────────────────────────────────────
+// ── Global Remote Locations Data (all ~195 countries) ───────────────
 const GLOBAL_LOCATIONS = {
   'north-america': {
     name: 'North America',
     countries: {
-      'USA': { name: 'United States', regions: ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'] },
-      'Canada': { name: 'Canada', regions: ['AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'ON', 'PE', 'QC', 'SK', 'NT', 'NU', 'YT'] },
+      'USA': { name: 'United States', regions: ['Alabama','Alaska','Arizona','Arkansas','California','Colorado','Connecticut','Delaware','Florida','Georgia','Hawaii','Idaho','Illinois','Indiana','Iowa','Kansas','Kentucky','Louisiana','Maine','Maryland','Massachusetts','Michigan','Minnesota','Mississippi','Missouri','Montana','Nebraska','Nevada','New Hampshire','New Jersey','New Mexico','New York','North Carolina','North Dakota','Ohio','Oklahoma','Oregon','Pennsylvania','Rhode Island','South Carolina','South Dakota','Tennessee','Texas','Utah','Vermont','Virginia','Washington','West Virginia','Wisconsin','Wyoming','Washington DC'] },
+      'Canada': { name: 'Canada', regions: ['Alberta','British Columbia','Manitoba','New Brunswick','Newfoundland and Labrador','Nova Scotia','Ontario','Prince Edward Island','Quebec','Saskatchewan','Northwest Territories','Nunavut','Yukon'] },
       'Mexico': { name: 'Mexico', regions: null },
+      'Greenland': { name: 'Greenland', regions: null },
+      'Saint Pierre and Miquelon': { name: 'Saint Pierre and Miquelon', regions: null },
+    }
+  },
+  'central-america': {
+    name: 'Central America',
+    countries: {
+      'Belize': { name: 'Belize', regions: null },
+      'Costa Rica': { name: 'Costa Rica', regions: null },
+      'El Salvador': { name: 'El Salvador', regions: null },
+      'Guatemala': { name: 'Guatemala', regions: null },
+      'Honduras': { name: 'Honduras', regions: null },
+      'Nicaragua': { name: 'Nicaragua', regions: null },
+      'Panama': { name: 'Panama', regions: null },
+    }
+  },
+  'caribbean': {
+    name: 'Caribbean',
+    countries: {
+      'Antigua and Barbuda': { name: 'Antigua and Barbuda', regions: null },
+      'Aruba': { name: 'Aruba', regions: null },
+      'Bahamas': { name: 'Bahamas', regions: null },
+      'Barbados': { name: 'Barbados', regions: null },
+      'Bermuda': { name: 'Bermuda', regions: null },
+      'Cayman Islands': { name: 'Cayman Islands', regions: null },
+      'Cuba': { name: 'Cuba', regions: null },
+      'Dominica': { name: 'Dominica', regions: null },
+      'Dominican Republic': { name: 'Dominican Republic', regions: null },
+      'Grenada': { name: 'Grenada', regions: null },
+      'Guadeloupe': { name: 'Guadeloupe', regions: null },
+      'Haiti': { name: 'Haiti', regions: null },
+      'Jamaica': { name: 'Jamaica', regions: null },
+      'Martinique': { name: 'Martinique', regions: null },
+      'Puerto Rico': { name: 'Puerto Rico', regions: null },
+      'Saint Kitts and Nevis': { name: 'Saint Kitts and Nevis', regions: null },
+      'Saint Lucia': { name: 'Saint Lucia', regions: null },
+      'Saint Vincent and the Grenadines': { name: 'Saint Vincent and the Grenadines', regions: null },
+      'Trinidad and Tobago': { name: 'Trinidad and Tobago', regions: null },
+      'Turks and Caicos Islands': { name: 'Turks and Caicos Islands', regions: null },
+      'US Virgin Islands': { name: 'US Virgin Islands', regions: null },
     }
   },
   'south-america': {
     name: 'South America',
     countries: {
       'Argentina': { name: 'Argentina', regions: null },
+      'Bolivia': { name: 'Bolivia', regions: null },
       'Brazil': { name: 'Brazil', regions: null },
       'Chile': { name: 'Chile', regions: null },
       'Colombia': { name: 'Colombia', regions: null },
+      'Ecuador': { name: 'Ecuador', regions: null },
+      'French Guiana': { name: 'French Guiana', regions: null },
+      'Guyana': { name: 'Guyana', regions: null },
+      'Paraguay': { name: 'Paraguay', regions: null },
       'Peru': { name: 'Peru', regions: null },
+      'Suriname': { name: 'Suriname', regions: null },
       'Uruguay': { name: 'Uruguay', regions: null },
       'Venezuela': { name: 'Venezuela', regions: null },
     }
@@ -1216,6 +1269,7 @@ const GLOBAL_LOCATIONS = {
     countries: {
       'Denmark': { name: 'Denmark', regions: null },
       'Estonia': { name: 'Estonia', regions: null },
+      'Faroe Islands': { name: 'Faroe Islands', regions: null },
       'Finland': { name: 'Finland', regions: null },
       'Iceland': { name: 'Iceland', regions: null },
       'Latvia': { name: 'Latvia', regions: null },
@@ -1227,10 +1281,14 @@ const GLOBAL_LOCATIONS = {
   'europe-east': {
     name: 'Europe (East)',
     countries: {
+      'Armenia': { name: 'Armenia', regions: null },
+      'Azerbaijan': { name: 'Azerbaijan', regions: null },
       'Belarus': { name: 'Belarus', regions: null },
       'Bulgaria': { name: 'Bulgaria', regions: null },
       'Czech Republic': { name: 'Czech Republic', regions: null },
+      'Georgia': { name: 'Georgia', regions: null },
       'Hungary': { name: 'Hungary', regions: null },
+      'Moldova': { name: 'Moldova', regions: null },
       'Poland': { name: 'Poland', regions: null },
       'Romania': { name: 'Romania', regions: null },
       'Russia': { name: 'Russia', regions: null },
@@ -1242,17 +1300,23 @@ const GLOBAL_LOCATIONS = {
     name: 'Europe (South)',
     countries: {
       'Albania': { name: 'Albania', regions: null },
-      'Bosnia': { name: 'Bosnia & Herzegovina', regions: null },
+      'Andorra': { name: 'Andorra', regions: null },
+      'Bosnia and Herzegovina': { name: 'Bosnia and Herzegovina', regions: null },
       'Croatia': { name: 'Croatia', regions: null },
       'Cyprus': { name: 'Cyprus', regions: null },
+      'Gibraltar': { name: 'Gibraltar', regions: null },
       'Greece': { name: 'Greece', regions: null },
       'Italy': { name: 'Italy', regions: null },
+      'Kosovo': { name: 'Kosovo', regions: null },
       'Malta': { name: 'Malta', regions: null },
       'Montenegro': { name: 'Montenegro', regions: null },
+      'North Macedonia': { name: 'North Macedonia', regions: null },
       'Portugal': { name: 'Portugal', regions: null },
+      'San Marino': { name: 'San Marino', regions: null },
       'Serbia': { name: 'Serbia', regions: null },
       'Slovenia': { name: 'Slovenia', regions: null },
       'Spain': { name: 'Spain', regions: null },
+      'Vatican City': { name: 'Vatican City', regions: null },
     }
   },
   'europe-west': {
@@ -1263,21 +1327,102 @@ const GLOBAL_LOCATIONS = {
       'France': { name: 'France', regions: null },
       'Germany': { name: 'Germany', regions: null },
       'Ireland': { name: 'Ireland', regions: null },
+      'Liechtenstein': { name: 'Liechtenstein', regions: null },
       'Luxembourg': { name: 'Luxembourg', regions: null },
+      'Monaco': { name: 'Monaco', regions: null },
       'Netherlands': { name: 'Netherlands', regions: null },
       'Switzerland': { name: 'Switzerland', regions: null },
       'United Kingdom': { name: 'United Kingdom', regions: null },
     }
   },
-  'africa': {
-    name: 'Africa',
+  'africa-north': {
+    name: 'Africa (North)',
     countries: {
+      'Algeria': { name: 'Algeria', regions: null },
       'Egypt': { name: 'Egypt', regions: null },
-      'Kenya': { name: 'Kenya', regions: null },
+      'Libya': { name: 'Libya', regions: null },
+      'Mauritania': { name: 'Mauritania', regions: null },
       'Morocco': { name: 'Morocco', regions: null },
-      'Nigeria': { name: 'Nigeria', regions: null },
-      'South Africa': { name: 'South Africa', regions: null },
+      'Sudan': { name: 'Sudan', regions: null },
       'Tunisia': { name: 'Tunisia', regions: null },
+      'Western Sahara': { name: 'Western Sahara', regions: null },
+    }
+  },
+  'africa-west': {
+    name: 'Africa (West)',
+    countries: {
+      'Benin': { name: 'Benin', regions: null },
+      'Burkina Faso': { name: 'Burkina Faso', regions: null },
+      'Cape Verde': { name: 'Cape Verde', regions: null },
+      "Cote d'Ivoire": { name: "Côte d'Ivoire", regions: null },
+      'Gambia': { name: 'Gambia', regions: null },
+      'Ghana': { name: 'Ghana', regions: null },
+      'Guinea': { name: 'Guinea', regions: null },
+      'Guinea-Bissau': { name: 'Guinea-Bissau', regions: null },
+      'Liberia': { name: 'Liberia', regions: null },
+      'Mali': { name: 'Mali', regions: null },
+      'Niger': { name: 'Niger', regions: null },
+      'Nigeria': { name: 'Nigeria', regions: null },
+      'Senegal': { name: 'Senegal', regions: null },
+      'Sierra Leone': { name: 'Sierra Leone', regions: null },
+      'Togo': { name: 'Togo', regions: null },
+    }
+  },
+  'africa-east': {
+    name: 'Africa (East)',
+    countries: {
+      'Burundi': { name: 'Burundi', regions: null },
+      'Comoros': { name: 'Comoros', regions: null },
+      'Djibouti': { name: 'Djibouti', regions: null },
+      'Eritrea': { name: 'Eritrea', regions: null },
+      'Ethiopia': { name: 'Ethiopia', regions: null },
+      'Kenya': { name: 'Kenya', regions: null },
+      'Madagascar': { name: 'Madagascar', regions: null },
+      'Malawi': { name: 'Malawi', regions: null },
+      'Mauritius': { name: 'Mauritius', regions: null },
+      'Mozambique': { name: 'Mozambique', regions: null },
+      'Rwanda': { name: 'Rwanda', regions: null },
+      'Seychelles': { name: 'Seychelles', regions: null },
+      'Somalia': { name: 'Somalia', regions: null },
+      'South Sudan': { name: 'South Sudan', regions: null },
+      'Tanzania': { name: 'Tanzania', regions: null },
+      'Uganda': { name: 'Uganda', regions: null },
+      'Zambia': { name: 'Zambia', regions: null },
+      'Zimbabwe': { name: 'Zimbabwe', regions: null },
+    }
+  },
+  'africa-central': {
+    name: 'Africa (Central)',
+    countries: {
+      'Cameroon': { name: 'Cameroon', regions: null },
+      'Central African Republic': { name: 'Central African Republic', regions: null },
+      'Chad': { name: 'Chad', regions: null },
+      'Republic of Congo': { name: 'Republic of Congo', regions: null },
+      'DR Congo': { name: 'DR Congo', regions: null },
+      'Equatorial Guinea': { name: 'Equatorial Guinea', regions: null },
+      'Gabon': { name: 'Gabon', regions: null },
+      'Sao Tome and Principe': { name: 'São Tomé and Príncipe', regions: null },
+    }
+  },
+  'africa-south': {
+    name: 'Africa (South)',
+    countries: {
+      'Angola': { name: 'Angola', regions: null },
+      'Botswana': { name: 'Botswana', regions: null },
+      'Eswatini': { name: 'Eswatini', regions: null },
+      'Lesotho': { name: 'Lesotho', regions: null },
+      'Namibia': { name: 'Namibia', regions: null },
+      'South Africa': { name: 'South Africa', regions: null },
+    }
+  },
+  'asia-central': {
+    name: 'Asia (Central)',
+    countries: {
+      'Kazakhstan': { name: 'Kazakhstan', regions: null },
+      'Kyrgyzstan': { name: 'Kyrgyzstan', regions: null },
+      'Tajikistan': { name: 'Tajikistan', regions: null },
+      'Turkmenistan': { name: 'Turkmenistan', regions: null },
+      'Uzbekistan': { name: 'Uzbekistan', regions: null },
     }
   },
   'asia-east': {
@@ -1286,6 +1431,7 @@ const GLOBAL_LOCATIONS = {
       'China': { name: 'China', regions: null },
       'Hong Kong': { name: 'Hong Kong', regions: null },
       'Japan': { name: 'Japan', regions: null },
+      'Macau': { name: 'Macau', regions: null },
       'Mongolia': { name: 'Mongolia', regions: null },
       'North Korea': { name: 'North Korea', regions: null },
       'South Korea': { name: 'South Korea', regions: null },
@@ -1318,6 +1464,7 @@ const GLOBAL_LOCATIONS = {
       'Philippines': { name: 'Philippines', regions: null },
       'Singapore': { name: 'Singapore', regions: null },
       'Thailand': { name: 'Thailand', regions: null },
+      'Timor-Leste': { name: 'Timor-Leste', regions: null },
       'Vietnam': { name: 'Vietnam', regions: null },
     }
   },
@@ -1331,6 +1478,7 @@ const GLOBAL_LOCATIONS = {
       'Kuwait': { name: 'Kuwait', regions: null },
       'Lebanon': { name: 'Lebanon', regions: null },
       'Oman': { name: 'Oman', regions: null },
+      'Palestine': { name: 'Palestine', regions: null },
       'Qatar': { name: 'Qatar', regions: null },
       'Saudi Arabia': { name: 'Saudi Arabia', regions: null },
       'Syria': { name: 'Syria', regions: null },
@@ -1342,11 +1490,21 @@ const GLOBAL_LOCATIONS = {
   'oceania': {
     name: 'Oceania',
     countries: {
-      'Australia': { name: 'Australia', regions: ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'] },
+      'Australia': { name: 'Australia', regions: ['New South Wales','Victoria','Queensland','Western Australia','South Australia','Tasmania','Australian Capital Territory','Northern Territory'] },
       'Fiji': { name: 'Fiji', regions: null },
+      'Kiribati': { name: 'Kiribati', regions: null },
+      'Marshall Islands': { name: 'Marshall Islands', regions: null },
+      'Micronesia': { name: 'Micronesia', regions: null },
+      'Nauru': { name: 'Nauru', regions: null },
+      'New Caledonia': { name: 'New Caledonia', regions: null },
       'New Zealand': { name: 'New Zealand', regions: null },
+      'Palau': { name: 'Palau', regions: null },
       'Papua New Guinea': { name: 'Papua New Guinea', regions: null },
       'Samoa': { name: 'Samoa', regions: null },
+      'Solomon Islands': { name: 'Solomon Islands', regions: null },
+      'Tonga': { name: 'Tonga', regions: null },
+      'Tuvalu': { name: 'Tuvalu', regions: null },
+      'Vanuatu': { name: 'Vanuatu', regions: null },
     }
   },
 };
@@ -1380,22 +1538,25 @@ async function loadSearches() {
   }
 
   // Load global remote locations if present
+  _globalRemoteSelected = {};
+  for (const region of Object.keys(GLOBAL_LOCATIONS)) {
+    _globalRemoteSelected[region] = {};
+  }
   if (_searchData.global_remote_locations && _searchData.global_remote_locations.length > 0) {
     document.getElementById('global-remote-enable').checked = true;
-    _globalRemoteSelected = {};
-    for (const continent of Object.keys(GLOBAL_LOCATIONS)) {
-      _globalRemoteSelected[continent] = {};
-    }
-    // Rebuild selection from saved data
+    document.getElementById('global-remote-panel').style.display = '';
     _searchData.global_remote_locations.forEach(loc => {
-      const continent = loc.continent;
+      const region = loc.continent;
       const country = loc.country;
-      if (loc.regions && loc.regions.length > 0) {
-        _globalRemoteSelected[continent][country] = loc.regions;
-      } else {
-        _globalRemoteSelected[continent][country] = true;
+      if (region && country && _globalRemoteSelected[region] !== undefined) {
+        if (loc.regions && loc.regions.length > 0) {
+          _globalRemoteSelected[region][country] = loc.regions;
+        } else {
+          _globalRemoteSelected[region][country] = true;
+        }
       }
     });
+    updateGlobalRemoteDisplay();
   }
 
   renderSearchForm();
@@ -1597,10 +1758,14 @@ function toggleGlobalRemote() {
 
 function toggleContinent(continent) {
   const panel = document.getElementById('global-countries-panel');
+  // Deactivate all buttons
+  document.querySelectorAll('#continent-buttons .btn').forEach(b => b.style.borderColor = '');
   if (panel.style.display === 'none' || panel.dataset.continent !== continent) {
     panel.dataset.continent = continent;
     renderCountriesPanel(continent);
     panel.style.display = '';
+    const btn = document.getElementById('cb-' + continent);
+    if (btn) btn.style.borderColor = 'var(--accent)';
   } else {
     panel.style.display = 'none';
   }
@@ -1609,8 +1774,8 @@ function toggleContinent(continent) {
 function renderGlobalRemoteUI() {
   // Initialize empty selection if needed
   if (Object.keys(_globalRemoteSelected).length === 0) {
-    for (const continent of Object.keys(GLOBAL_LOCATIONS)) {
-      _globalRemoteSelected[continent] = {};
+    for (const region of Object.keys(GLOBAL_LOCATIONS)) {
+      _globalRemoteSelected[region] = {};
     }
   }
   updateGlobalRemoteDisplay();
