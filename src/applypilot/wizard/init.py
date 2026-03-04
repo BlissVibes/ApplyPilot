@@ -470,7 +470,7 @@ def _setup_searches(profile: dict) -> None:
         "defaults:",
         f'  location: "{location}"',
         f"  distance: {distance}",
-        "  hours_old: 72",
+        "  hours_old: 336",
         "  results_per_site: 50",
         "",
         "locations:",

@@ -822,7 +822,7 @@ def api_searches_get():
                 return jsonify({"exists": False, "data": {
                     "queries": [], "locations": [], "location": {"accept_patterns": [], "reject_patterns": []},
                     "country": "USA", "boards": ["indeed", "linkedin", "glassdoor", "zip_recruiter", "google"],
-                    "defaults": {"results_per_site": 100, "hours_old": 72, "days_old": 3},
+                    "defaults": {"results_per_site": 100, "hours_old": 336, "days_old": 14},
                     "exclusions": {"titles": [], "experience": [], "description": [], "salary": []},
                     "global_remote_locations": [],
                 }})
@@ -846,7 +846,10 @@ def api_searches_get():
             if "hours_old" in defaults and "days_old" not in defaults:
                 defaults["days_old"] = max(1, defaults["hours_old"] // 24)
             defaults.setdefault("results_per_site", 100)
-            defaults.setdefault("hours_old", defaults.get("days_old", 3) * 24)
+            # Ensure both days_old and hours_old are set (default 14 days = 336 hours)
+            days_old = defaults.get("days_old") or defaults.get("hours_old", 336) // 24 or 14
+            defaults["days_old"] = max(1, days_old)
+            defaults.setdefault("hours_old", defaults["days_old"] * 24)
 
             # Handle old exclude_titles field -> new exclusions format
             if "exclude_titles" in data and "exclusions" not in data:

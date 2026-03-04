@@ -570,7 +570,7 @@ textarea { min-height:100px; resize:vertical; }
             </div>
             <div class="form-group">
               <label>Max job age (days)</label>
-              <input type="number" id="search-days-old" value="3" min="1" max="30" style="width:100%;">
+              <input type="number" id="search-days-old" value="14" min="1" max="30" style="width:100%;">
             </div>
           </div>
         </div>
@@ -2208,7 +2208,7 @@ async function loadSearches() {
   _searchData = data.data || {
     queries: [], locations: [], location: {accept_patterns: [], reject_patterns: []},
     country: 'USA', boards: ['indeed','linkedin','glassdoor','zip_recruiter','google'],
-    defaults: {results_per_site: 100, hours_old: 72},
+    defaults: {results_per_site: 100, hours_old: 336, days_old: 14},
     exclusions: {titles: [], experience: [], description: [], salary: []},
     global_remote_locations: [],
   };
