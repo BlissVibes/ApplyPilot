@@ -856,6 +856,7 @@ function closeJobModal() { document.getElementById('job-modal').classList.remove
 async function loadJobResumeSelector(url) {
   const jobResume = await api('/api/job/' + encodeURIComponent(url) + '/resume');
   const resumesData = await api('/api/resumes');
+  const jobData = await api('/api/job/' + encodeURIComponent(url));
 
   const selectorId = 'job-resume-selector-' + url.replace(/[^a-z0-9]/gi, '_');
   const div = document.getElementById(selectorId);
@@ -864,6 +865,30 @@ async function loadJobResumeSelector(url) {
 
   const currentResume = jobResume.resume_id || 'default';
   const isOverride = jobResume.selection_method === 'override';
+  const jobTitle = (jobData.title || '').toLowerCase();
+
+  // Determine reason for current selection
+  let reason = 'Using default resume';
+  let reasonColor = 'var(--text-dim)';
+
+  if (isOverride) {
+    reason = 'Manually overridden for this job';
+    reasonColor = 'var(--accent)';
+  } else {
+    // Check if current resume matches job title
+    for (const resume of resumesData.resumes) {
+      if (resume.id === currentResume && resume.job_title_keywords && resume.job_title_keywords.length) {
+        for (const keyword of resume.job_title_keywords) {
+          if (jobTitle.includes(keyword.toLowerCase())) {
+            reason = `Auto-matched to "${resume.name}" (keyword: "${keyword}")`;
+            reasonColor = 'var(--green)';
+            break;
+          }
+        }
+        if (reasonColor !== 'var(--text-dim)') break;
+      }
+    }
+  }
 
   let html = `
     <div style="background:var(--surface2);padding:12px;border-radius:6px;border:1px solid var(--border);">
@@ -875,18 +900,30 @@ async function loadJobResumeSelector(url) {
   // Add auto option
   html += `<option value="auto">Use Default</option>`;
 
-  // Add all resumes
+  // Add all resumes with indication of which have matching keywords
   resumesData.resumes.forEach(resume => {
     const selected = currentResume === resume.id ? 'selected' : '';
-    html += `<option value="${esc(resume.id)}" ${selected}>${esc(resume.name)}</option>`;
+    let resumeLabel = esc(resume.name);
+
+    // Check if this resume matches the job title
+    if (resume.job_title_keywords && resume.job_title_keywords.length) {
+      for (const keyword of resume.job_title_keywords) {
+        if (jobTitle.includes(keyword.toLowerCase())) {
+          resumeLabel += ` ✓ (${keyword})`;
+          break;
+        }
+      }
+    }
+
+    html += `<option value="${esc(resume.id)}" ${selected}>${resumeLabel}</option>`;
   });
 
   html += `
         </select>
         <button class="btn btn-secondary btn-sm" onclick="setJobResume('${esc(url)}')">Apply</button>
       </div>
-      <p style="margin:8px 0 0 0;font-size:11px;color:var(--text-dim);">
-        ${isOverride ? 'Custom selection for this job' : 'Using default resume'}
+      <p style="margin:8px 0 0 0;font-size:11px;color:${reasonColor};">
+        ${reason}
       </p>
     </div>
   `;
