@@ -27,7 +27,8 @@ from applypilot.resume_manager import (
     assign_resume_to_job, validate_resume_exists, get_default_resume_id, set_default_resume_id,
     set_job_title_keywords, get_job_title_keywords, get_matching_resumes,
     get_pending_conflicts, get_resolved_conflicts, resolve_conflict,
-    get_recommendation,
+    get_recommendation, get_learning_settings, set_learning_settings,
+    should_auto_send_conflict,
 )
 
 log = logging.getLogger(__name__)
@@ -618,13 +619,19 @@ def api_resume_queue_skip(url):
 
 @app.route("/api/resume-queue/resolve-all", methods=["POST"])
 def api_resume_queue_resolve_all():
-    """Resolve all pending conflicts using recommendations or top specificity match."""
+    """Resolve all pending conflicts using recommendations or top specificity match.
+
+    Respects confidence threshold if auto-send is enabled. Conflicts below
+    the threshold will be skipped when using 'recommendation' method.
+    """
     data = request.get_json() or {}
     method = data.get("method", "recommendation")  # "recommendation" or "specificity"
+    force = data.get("force", False)  # bypass confidence threshold
 
     conn = get_connection()
     pending = get_pending_conflicts(conn)
     resolved_count = 0
+    skipped_count = 0
 
     for conflict in pending:
         url = conflict["url"]
@@ -633,6 +640,16 @@ def api_resume_queue_resolve_all():
             continue
 
         if method == "recommendation" and conflict["recommendation_id"]:
+            confidence = conflict["recommendation_confidence"]
+
+            # Check confidence threshold unless forced
+            if not force:
+                settings = get_learning_settings()
+                threshold = settings["confidence_threshold"]
+                if confidence < threshold:
+                    skipped_count += 1
+                    continue
+
             chosen = conflict["recommendation_id"]
         else:
             chosen = matches[0]["resume_id"]  # top specificity
@@ -644,6 +661,7 @@ def api_resume_queue_resolve_all():
         "status": "resolved_all",
         "method": method,
         "resolved_count": resolved_count,
+        "skipped_count": skipped_count,
     })
 
 
@@ -662,6 +680,34 @@ def api_resume_recommendation():
         "recommendation_id": rec_id,
         "confidence": confidence,
     })
+
+
+@app.route("/api/learning-settings", methods=["GET"])
+def api_learning_settings_get():
+    """Get learning system settings."""
+    settings = get_learning_settings()
+    return jsonify(settings)
+
+
+@app.route("/api/learning-settings", methods=["POST"])
+def api_learning_settings_set():
+    """Update learning system settings."""
+    data = request.get_json() or {}
+    auto_send = data.get("auto_send_enabled")
+    threshold = data.get("confidence_threshold")
+
+    try:
+        set_learning_settings(
+            auto_send_enabled=auto_send,
+            confidence_threshold=threshold,
+        )
+        settings = get_learning_settings()
+        return jsonify({
+            "status": "saved",
+            "settings": settings,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/env", methods=["GET"])

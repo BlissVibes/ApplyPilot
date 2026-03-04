@@ -11,7 +11,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-from applypilot.config import get_resume_path, load_resumes_manifest
+from applypilot.config import get_resume_path, load_resumes_manifest, RESUMES_MANIFEST_PATH
 
 log = logging.getLogger(__name__)
 
@@ -482,3 +482,67 @@ def get_recommendation(
     confidence = best_weight / total_weight if total_weight > 0 else 0.0
 
     return best_resume, round(confidence, 3)
+
+
+# ---------------------------------------------------------------------------
+# Learning System Settings
+# ---------------------------------------------------------------------------
+
+def get_learning_settings() -> dict:
+    """Get learning system settings from manifest.
+
+    Returns:
+        Dict with keys:
+        - auto_send_enabled: bool (default: False)
+        - confidence_threshold: float 0.0-1.0 (default: 0.9)
+    """
+    manifest = load_resumes_manifest()
+    learning = manifest.get("learning_settings", {})
+
+    return {
+        "auto_send_enabled": learning.get("auto_send_enabled", False),
+        "confidence_threshold": learning.get("confidence_threshold", 0.9),
+    }
+
+
+def set_learning_settings(auto_send_enabled: bool = None, confidence_threshold: float = None) -> None:
+    """Update learning system settings in manifest.
+
+    Args:
+        auto_send_enabled: Whether to auto-resolve conflicts if confidence exceeds threshold.
+        confidence_threshold: Minimum confidence (0.0-1.0) to auto-send.
+    """
+    manifest = load_resumes_manifest()
+
+    if "learning_settings" not in manifest:
+        manifest["learning_settings"] = {}
+
+    if auto_send_enabled is not None:
+        manifest["learning_settings"]["auto_send_enabled"] = bool(auto_send_enabled)
+
+    if confidence_threshold is not None:
+        # Clamp to 0.0-1.0
+        threshold = max(0.0, min(1.0, float(confidence_threshold)))
+        manifest["learning_settings"]["confidence_threshold"] = round(threshold, 2)
+
+    RESUMES_MANIFEST_PATH.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    log.info("Updated learning settings: auto_send=%s, threshold=%.0f%%",
+             manifest["learning_settings"].get("auto_send_enabled", False),
+             manifest["learning_settings"].get("confidence_threshold", 0.9) * 100)
+
+
+def should_auto_send_conflict(confidence: float) -> bool:
+    """Check if a conflict should be auto-resolved based on settings.
+
+    Args:
+        confidence: Recommendation confidence (0.0-1.0).
+
+    Returns:
+        True if auto-send is enabled and confidence exceeds threshold.
+    """
+    settings = get_learning_settings()
+    if not settings["auto_send_enabled"]:
+        return False
+
+    threshold = settings["confidence_threshold"]
+    return confidence >= threshold

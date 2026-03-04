@@ -437,6 +437,7 @@ textarea { min-height:100px; resize:vertical; }
     <h1>Settings</h1>
     <div class="tabs">
       <div class="tab active" onclick="showSettingsTab('searches')">Search Config</div>
+      <div class="tab" onclick="showSettingsTab('learning')">Learning</div>
       <div class="tab" onclick="showSettingsTab('env')">Environment</div>
     </div>
     <div id="settings-searches" class="settings-tab">
@@ -639,6 +640,57 @@ textarea { min-height:100px; resize:vertical; }
         <button class="btn btn-primary" onclick="saveSearches()" style="margin-top:8px;">Save</button>
       </div>
     </div>
+    <div id="settings-learning" class="settings-tab" style="display:none;">
+      <h2>Learning System Settings</h2>
+      <p style="color:var(--text-dim);margin-bottom:16px;font-size:13px;">
+        Control how the system learns from your manual resume selections and when to auto-send resumes based on learned recommendations.
+      </p>
+      <div class="card" style="padding:16px;">
+        <h3 style="margin:0 0 16px 0;">Auto-Send Recommendations</h3>
+
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+            <input type="checkbox" id="learning-auto-send" onchange="toggleAutoSend()" style="width:auto;">
+            <strong>Enable auto-resolution of conflicts when confidence is high enough</strong>
+          </label>
+          <p style="margin:8px 0 0 0;font-size:11px;color:var(--text-dim);margin-left:24px;">
+            When enabled, the system will automatically resolve resume conflicts with recommendations that meet your confidence threshold.
+          </p>
+        </div>
+
+        <div class="form-group" style="margin-top:16px;">
+          <label style="display:block;margin-bottom:8px;">
+            <strong>Confidence Threshold: <span id="learning-threshold-display">90%</span></strong>
+          </label>
+          <p style="margin:0 0 12px 0;font-size:11px;color:var(--text-dim);">
+            Only auto-send if the recommendation confidence is at or above this threshold.
+          </p>
+          <input type="range" id="learning-threshold" min="0" max="100" value="90" step="5"
+                 style="width:100%;height:6px;border-radius:3px;background:var(--surface2);outline:none;-webkit-appearance:none;appearance:none;"
+                 onchange="updateThresholdDisplay()"
+                 oninput="updateThresholdDisplay()">
+          <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--text-dim);">
+            <span>0%</span>
+            <span>50%</span>
+            <span>100%</span>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" onclick="saveLearningSettings()" style="margin-top:16px;">Save Settings</button>
+
+        <div id="learning-status" style="margin-top:12px;padding:8px;border-radius:4px;display:none;"></div>
+      </div>
+
+      <div class="card" style="padding:16px;margin-top:16px;">
+        <h3 style="margin:0 0 8px 0;">Learning System Info</h3>
+        <p style="color:var(--text-dim);font-size:12px;margin:0;">
+          The system learns from your manual resume selections when conflicts are resolved.
+          Each time you pick a resume for a conflicting job, it records that choice.
+          Future jobs with similar titles will get a recommendation based on these selections,
+          with a confidence score showing how many similar past jobs used that resume.
+        </p>
+      </div>
+    </div>
     <div id="settings-env" class="settings-tab" style="display:none;">
       <h2>Environment Variables</h2>
       <div id="env-display"></div>
@@ -710,6 +762,7 @@ function showSettingsTab(name) {
   document.querySelectorAll('#page-settings .tab').forEach(t => t.classList.remove('active'));
   event.target.classList.add('active');
   if (name === 'env') loadEnvDisplay();
+  if (name === 'learning') loadLearningSettings();
 }
 
 // ── Toast ───────────────────────────────────────────────────────────
@@ -2479,6 +2532,64 @@ function getGlobalRemoteLocations() {
 }
 
 // ── Env Display ─────────────────────────────────────────────────────
+// ── Learning Settings ──────────────────────────────────────────────
+
+async function loadLearningSettings() {
+  const data = await api('/api/learning-settings');
+  const autoSendToggle = document.getElementById('learning-auto-send');
+  const thresholdSlider = document.getElementById('learning-threshold');
+
+  if (data && !data.error) {
+    autoSendToggle.checked = data.auto_send_enabled || false;
+    thresholdSlider.value = Math.round((data.confidence_threshold || 0.9) * 100);
+    updateThresholdDisplay();
+  }
+}
+
+function toggleAutoSend() {
+  // Just update UI, save on save button click
+  const toggle = document.getElementById('learning-auto-send');
+  const status = document.getElementById('learning-status');
+  status.style.display = 'none';
+}
+
+function updateThresholdDisplay() {
+  const slider = document.getElementById('learning-threshold');
+  const display = document.getElementById('learning-threshold-display');
+  display.textContent = slider.value + '%';
+}
+
+async function saveLearningSettings() {
+  const autoSend = document.getElementById('learning-auto-send').checked;
+  const threshold = parseInt(document.getElementById('learning-threshold').value) / 100;
+
+  const r = await fetch('/api/learning-settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      auto_send_enabled: autoSend,
+      confidence_threshold: threshold,
+    }),
+  });
+
+  const data = await r.json();
+  const status = document.getElementById('learning-status');
+
+  if (data.error) {
+    status.style.background = 'rgba(248, 113, 113, 0.1)';
+    status.style.color = 'var(--red)';
+    status.textContent = '❌ ' + data.error;
+    status.style.display = 'block';
+    toast(data.error, 'err');
+  } else {
+    status.style.background = 'rgba(74, 222, 128, 0.1)';
+    status.style.color = 'var(--green)';
+    status.textContent = '✓ Settings saved! Auto-send is ' + (autoSend ? 'ON (threshold: ' + Math.round(threshold * 100) + '%)' : 'OFF');
+    status.style.display = 'block';
+    toast('Learning settings saved');
+  }
+}
+
 async function loadEnvDisplay() {
   const data = await api('/api/env');
   const div = document.getElementById('env-display');
