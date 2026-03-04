@@ -197,6 +197,9 @@ textarea { min-height:100px; resize:vertical; }
       Settings
     </a>
   </nav>
+  <div style="margin-top:auto;padding:16px 12px;border-top:1px solid var(--border);">
+    <button class="btn" style="width:100%;background:var(--red);color:white;font-weight:600;padding:12px;border-radius:6px;border:none;cursor:pointer;font-size:14px;transition:all .15s;" onclick="showTestModeConfirm()">🔴 Test Mode</button>
+  </div>
 </div>
 
 <!-- Main Content -->
@@ -727,6 +730,32 @@ textarea { min-height:100px; resize:vertical; }
       <button class="btn btn-secondary btn-sm" onclick="closeJobModal()">Close</button>
     </div>
     <div id="job-modal-content"></div>
+  </div>
+</div>
+
+<!-- Test Mode Confirmation Modal -->
+<div class="modal-overlay" id="test-mode-confirm-modal">
+  <div class="modal" style="max-width:500px;">
+    <h2>Enable Test Mode?</h2>
+    <p style="color:var(--text-dim);margin:16px 0;">Test mode will collect and display all jobs and data that would be sent during auto-apply, without actually submitting any applications.</p>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:12px;margin:16px 0;font-size:13px;color:var(--yellow);">
+      <strong>⚠️ This is for verification only.</strong> No applications will be submitted.
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button class="btn" style="background:var(--red);color:white;flex:1;" onclick="runTestMode()">Enable Test Mode</button>
+      <button class="btn btn-secondary" style="flex:1;" onclick="closeTestModeConfirm()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Test Mode Results Modal -->
+<div class="modal-overlay" id="test-mode-results-modal">
+  <div class="modal" style="max-width:900px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2>Test Mode Results</h2>
+      <button class="btn btn-secondary btn-sm" onclick="closeTestModeResults()">Close</button>
+    </div>
+    <div id="test-mode-results-content"></div>
   </div>
 </div>
 
@@ -2648,6 +2677,92 @@ async function loadEnvDisplay() {
     Object.entries(data).map(([k, v]) =>
       `<tr><td style="font-family:monospace">${esc(k)}</td><td style="font-family:monospace">${esc(v.value)}</td><td>${v.is_set ? '<span class="badge badge-ok">SET</span>' : '<span class="badge badge-warn">EMPTY</span>'}</td></tr>`
     ).join('') + '</tbody></table>';
+}
+
+// ── Test Mode ────────────────────────────────────────────────────────
+function showTestModeConfirm() {
+  document.getElementById('test-mode-confirm-modal').classList.add('show');
+}
+
+function closeTestModeConfirm() {
+  document.getElementById('test-mode-confirm-modal').classList.remove('show');
+}
+
+function closeTestModeResults() {
+  document.getElementById('test-mode-results-modal').classList.remove('show');
+}
+
+async function runTestMode() {
+  closeTestModeConfirm();
+
+  const resultsDiv = document.getElementById('test-mode-results-content');
+  resultsDiv.innerHTML = '<p style="color:var(--text-dim);">Collecting test data...</p>';
+  document.getElementById('test-mode-results-modal').classList.add('show');
+
+  try {
+    const r = await fetch('/api/test-mode');
+    const data = await r.json();
+
+    if (data.error) {
+      resultsDiv.innerHTML = `<p style="color:var(--red);">Error: ${esc(data.error)}</p>`;
+      return;
+    }
+
+    let html = `
+      <div style="margin-bottom:20px;">
+        <h3>Summary</h3>
+        <div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
+          <div class="card">
+            <div class="label">Ready to Apply</div>
+            <div class="value">${data.summary.ready_count}</div>
+          </div>
+          <div class="card">
+            <div class="label">Total Files</div>
+            <div class="value">${data.summary.total_files}</div>
+          </div>
+          <div class="card">
+            <div class="label">With Cover Letter</div>
+            <div class="value">${data.summary.with_cover_letter}</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    if (data.jobs.length > 0) {
+      html += '<div style="margin-bottom:20px;"><h3>Jobs Ready for Application</h3><table style="width:100%;border-collapse:collapse;font-size:13px;">';
+      html += '<thead style="background:var(--surface2);border-bottom:1px solid var(--border);"><tr><th style="padding:8px;text-align:left;border-right:1px solid var(--border);">Title</th><th style="padding:8px;text-align:left;border-right:1px solid var(--border);">Company</th><th style="padding:8px;text-align:left;border-right:1px solid var(--border);">Score</th><th style="padding:8px;text-align:left;border-right:1px solid var(--border);">Resume</th><th style="padding:8px;text-align:left;">Cover Letter</th></tr></thead>';
+      html += '<tbody>';
+
+      data.jobs.forEach(job => {
+        const hasResume = job.tailored_resume_path ? '✓' : '✗';
+        const hasCover = job.cover_letter_path ? '✓' : '✗';
+        html += `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px;border-right:1px solid var(--border);"><strong>${esc(job.title || '(untitled)')}</strong></td>
+          <td style="padding:8px;border-right:1px solid var(--border);">${esc(job.site || 'unknown')}</td>
+          <td style="padding:8px;border-right:1px solid var(--border);text-align:center;"><span style="background:var(--green);color:var(--bg);padding:2px 6px;border-radius:4px;font-weight:600;">${job.fit_score}</span></td>
+          <td style="padding:8px;border-right:1px solid var(--border);text-align:center;">${hasResume}</td>
+          <td style="padding:8px;text-align:center;">${hasCover}</td>
+        </tr>`;
+      });
+
+      html += '</tbody></table></div>';
+    }
+
+    if (data.missing_files.length > 0) {
+      html += '<div style="background:rgba(248,113,113,0.1);border:1px solid var(--red);border-radius:6px;padding:12px;margin-bottom:20px;"><h3 style="color:var(--red);margin-top:0;">⚠️ Issues Found</h3>';
+      html += '<ul style="margin:8px 0;padding-left:20px;">';
+      data.missing_files.forEach(issue => {
+        html += `<li style="color:var(--text-dim);margin:4px 0;">${esc(issue)}</li>`;
+      });
+      html += '</ul></div>';
+    }
+
+    html += '<div style="background:rgba(74,222,128,0.1);border:1px solid var(--green);border-radius:6px;padding:12px;"><p style="margin:0;color:var(--text-dim);">✓ Everything looks good! You can now run <strong>auto-apply</strong> to submit these applications.</p></div>';
+
+    resultsDiv.innerHTML = html;
+  } catch (error) {
+    resultsDiv.innerHTML = `<p style="color:var(--red);">Error: ${esc(error.message)}</p>`;
+  }
 }
 
 // ── Modal close on overlay click ────────────────────────────────────

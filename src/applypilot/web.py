@@ -210,6 +210,67 @@ def api_pipeline_status():
         return jsonify(dict(_pipeline_state))
 
 
+@app.route("/api/test-mode")
+def api_test_mode():
+    """Test mode: collect and display all jobs that would be sent to auto-apply.
+
+    This endpoint shows what would be submitted without actually submitting anything.
+    """
+    try:
+        conn = get_connection()
+
+        # Get all jobs that are ready to apply (have tailored resume)
+        jobs = conn.execute("""
+            SELECT url, title, site, application_url, tailored_resume_path,
+                   fit_score, location, full_description, cover_letter_path
+            FROM jobs
+            WHERE tailored_resume_path IS NOT NULL
+            AND applied_at IS NULL
+            ORDER BY fit_score DESC, created_at DESC
+        """).fetchall()
+
+        jobs_list = []
+        missing_files = []
+        total_size = 0
+        with_cover_letter = 0
+
+        for row in jobs:
+            job_dict = dict(zip(row.keys(), row))
+            jobs_list.append(job_dict)
+
+            # Check if resume file exists
+            if job_dict.get('tailored_resume_path'):
+                from pathlib import Path
+                resume_path = Path(job_dict['tailored_resume_path'])
+                if resume_path.exists():
+                    total_size += resume_path.stat().st_size
+                else:
+                    missing_files.append(f"Missing resume for {job_dict['title']}: {job_dict['tailored_resume_path']}")
+
+            # Check if cover letter exists
+            if job_dict.get('cover_letter_path'):
+                from pathlib import Path
+                cover_path = Path(job_dict['cover_letter_path'])
+                if cover_path.exists():
+                    with_cover_letter += 1
+                else:
+                    missing_files.append(f"Missing cover letter for {job_dict['title']}: {job_dict['cover_letter_path']}")
+
+        return jsonify({
+            "summary": {
+                "ready_count": len(jobs_list),
+                "total_files": len(jobs_list),
+                "with_cover_letter": with_cover_letter,
+                "total_size_bytes": total_size,
+            },
+            "jobs": jobs_list,
+            "missing_files": missing_files,
+        })
+    except Exception as e:
+        log.exception("Test mode error")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/profile", methods=["GET"])
 def api_profile_get():
     """Get current profile."""
