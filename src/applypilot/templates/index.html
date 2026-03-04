@@ -857,6 +857,7 @@ async function loadJobResumeSelector(url) {
   const jobResume = await api('/api/job/' + encodeURIComponent(url) + '/resume');
   const resumesData = await api('/api/resumes');
   const jobData = await api('/api/job/' + encodeURIComponent(url));
+  const matchesData = await api('/api/job/' + encodeURIComponent(url) + '/resume-matches');
 
   const selectorId = 'job-resume-selector-' + url.replace(/[^a-z0-9]/gi, '_');
   const div = document.getElementById(selectorId);
@@ -866,27 +867,25 @@ async function loadJobResumeSelector(url) {
   const currentResume = jobResume.resume_id || 'default';
   const isOverride = jobResume.selection_method === 'override';
   const jobTitle = (jobData.title || '').toLowerCase();
+  const matches = matchesData.matches || [];
 
   // Determine reason for current selection
   let reason = 'Using default resume';
   let reasonColor = 'var(--text-dim)';
+  let conflictInfo = '';
 
   if (isOverride) {
     reason = 'Manually overridden for this job';
     reasonColor = 'var(--accent)';
-  } else {
-    // Check if current resume matches job title
-    for (const resume of resumesData.resumes) {
-      if (resume.id === currentResume && resume.job_title_keywords && resume.job_title_keywords.length) {
-        for (const keyword of resume.job_title_keywords) {
-          if (jobTitle.includes(keyword.toLowerCase())) {
-            reason = `Auto-matched to "${resume.name}" (keyword: "${keyword}")`;
-            reasonColor = 'var(--green)';
-            break;
-          }
-        }
-        if (reasonColor !== 'var(--text-dim)') break;
-      }
+  } else if (matches.length > 0) {
+    const primaryMatch = matches[0];
+    reason = `Auto-matched to "${primaryMatch.name}" (keyword: "${primaryMatch.matched_keyword}")`;
+    reasonColor = 'var(--green)';
+
+    // Show conflict warning if multiple resumes match
+    if (matches.length > 1) {
+      const otherMatches = matches.slice(1).map(m => `"${m.name}" (${m.matched_keyword})`).join(', ');
+      conflictInfo = `⚠️ Also matches: ${otherMatches}. Using "${primaryMatch.name}" because "${primaryMatch.matched_keyword}" is more specific.`;
     }
   }
 
@@ -925,6 +924,7 @@ async function loadJobResumeSelector(url) {
       <p style="margin:8px 0 0 0;font-size:11px;color:${reasonColor};">
         ${reason}
       </p>
+      ${conflictInfo ? `<p style="margin:6px 0 0 0;font-size:11px;color:var(--yellow);background:var(--surface);padding:8px;border-radius:4px;border-left:2px solid var(--yellow);">${conflictInfo}</p>` : ''}
     </div>
   `;
 

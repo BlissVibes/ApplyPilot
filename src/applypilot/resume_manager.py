@@ -117,7 +117,7 @@ def _match_job_to_resume(job_title: str) -> str | None:
     """Check if job title matches any resume's job title keywords.
 
     Matches against resume's job_title_keywords field (space or comma separated).
-    First match wins.
+    Uses specificity-based matching: longer keyword matches win.
 
     Args:
         job_title: Job title to match (lowercase).
@@ -127,6 +127,9 @@ def _match_job_to_resume(job_title: str) -> str | None:
     """
     manifest = load_resumes_manifest()
     resumes = manifest.get("resumes", [])
+
+    best_match = None
+    best_match_length = 0
 
     for resume in resumes:
         keywords = resume.get("job_title_keywords", [])
@@ -139,10 +142,14 @@ def _match_job_to_resume(job_title: str) -> str | None:
 
         # Check if any keyword appears in job title
         for keyword in keywords:
-            if keyword.lower() in job_title:
-                return resume.get("id")
+            keyword_lower = keyword.lower()
+            if keyword_lower in job_title:
+                # Longer matches are more specific and win
+                if len(keyword_lower) > best_match_length:
+                    best_match = resume.get("id")
+                    best_match_length = len(keyword_lower)
 
-    return None
+    return best_match
 
 
 def set_job_title_keywords(resume_id: str, keywords: list[str] | str) -> None:
@@ -190,3 +197,48 @@ def get_job_title_keywords(resume_id: str) -> list[str]:
             return resume.get("job_title_keywords", [])
 
     return []
+
+
+def get_matching_resumes(job_title: str) -> list[dict]:
+    """Get all resumes that match a job title, sorted by specificity.
+
+    Useful for detecting conflicts or showing what matches a job.
+
+    Args:
+        job_title: Job title to match (case-insensitive).
+
+    Returns:
+        List of dicts: [{"resume_id": "...", "name": "...", "matched_keyword": "...", "keyword_length": ...}]
+        Sorted by keyword length (longest/most specific first).
+    """
+    manifest = load_resumes_manifest()
+    resumes = manifest.get("resumes", [])
+    matches = []
+
+    job_title_lower = job_title.lower()
+
+    for resume in resumes:
+        keywords = resume.get("job_title_keywords", [])
+        if not keywords:
+            continue
+
+        # Normalize keywords to list of lowercase strings
+        if isinstance(keywords, str):
+            keywords = [k.strip() for k in keywords.replace(",", " ").split() if k.strip()]
+
+        # Find matching keywords
+        for keyword in keywords:
+            keyword_lower = keyword.lower()
+            if keyword_lower in job_title_lower:
+                matches.append({
+                    "resume_id": resume.get("id"),
+                    "name": resume.get("name"),
+                    "matched_keyword": keyword,
+                    "keyword_length": len(keyword_lower),
+                })
+                break  # Only count first matching keyword per resume
+
+    # Sort by keyword length (longest/most specific first)
+    matches.sort(key=lambda m: m["keyword_length"], reverse=True)
+
+    return matches

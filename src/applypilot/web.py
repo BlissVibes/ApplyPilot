@@ -25,7 +25,7 @@ from applypilot.config import (
 from applypilot.database import init_db, get_connection, get_stats, get_jobs_by_stage
 from applypilot.resume_manager import (
     assign_resume_to_job, validate_resume_exists, get_default_resume_id, set_default_resume_id,
-    set_job_title_keywords, get_job_title_keywords,
+    set_job_title_keywords, get_job_title_keywords, get_matching_resumes,
 )
 
 log = logging.getLogger(__name__)
@@ -501,6 +501,31 @@ def api_job_resume_set(url):
         "url": url,
         "resume_id": resume_id,
         "selection_method": "override",
+    })
+
+
+@app.route("/api/job/<path:url>/resume-matches", methods=["GET"])
+def api_job_resume_matches(url):
+    """Get all resumes that match a job's title, sorted by specificity.
+
+    Useful for detecting conflicts and showing which resumes would apply.
+    """
+    job = get_connection().execute(
+        "SELECT title FROM jobs WHERE url=?", (url,)
+    ).fetchone()
+
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    job_title = job[0] or ""
+    matches = get_matching_resumes(job_title)
+
+    return jsonify({
+        "url": url,
+        "job_title": job_title,
+        "matches": matches,
+        "match_count": len(matches),
+        "primary_match": matches[0]["resume_id"] if matches else None,
     })
 
 
